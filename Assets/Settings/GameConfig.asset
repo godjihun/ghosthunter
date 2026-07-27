@@ -1,0 +1,33 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b2e95996f08dcd047ba9d9d882eff943, type: 3}
+  m_Name: GameConfig
+  m_EditorClassIdentifier: Assembly-CSharp::GhostHunter.Core.GameConfig
+  HidingDuration: 30
+  InvestigationDuration: 120
+  FearSkillCooldown: 30
+  ToolNullifyDuration: 15
+  DetectionRadius: 3
+  HuntDuration: 60
+  ExorcistMoveSpeed: 4
+  SoulMoveSpeed: 4
+  GhostHuntMoveSpeed: 8
+  FearSkillRange: 1.5
+  WeaknessCount: 3
+  AltarCapacity: 3
+  TotalToolCount: 30
+  MaxPlayers: 5
+  DetectionFeedbackDuration: 1.5
+  PickupHoldDuration: 0.6
+  SpectatorCameraDistance: 2.5
+  SpectatorCameraHeight: 1.5
+  SpectatorCameraMinDistance: 0.5
