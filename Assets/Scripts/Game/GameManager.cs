@@ -136,6 +136,9 @@ namespace GhostHunter.Game
             GenerateWeakness();
             PlaceAtSpawnPoints();
 
+            // 스폰 배치가 끝난 뒤에 초기화해야 본체 좌표가 시작 위치로 잡힌다.
+            ResetGhostStates();
+
             ToolSpawner.Instance?.SpawnAllTools(config);
             Altar.Instance?.ServerClear();
 
@@ -150,7 +153,20 @@ namespace GhostHunter.Game
         /// </summary>
         private void AssignRoles()
         {
-            var players = new List<NetworkPlayer>(NetworkPlayer.All);
+            // <b>파괴된 항목을 반드시 걸러낸다.</b> NetworkPlayer.All은 static 리스트라
+            // 비정상 종료로 despawn 콜백을 놓치면 죽은 참조가 남는다. 그대로 두면
+            // Faction 대입에서 예외가 터지며 <b>루프가 중간에 끊겨</b>, 뒤쪽 플레이어들이
+            // 지난 판 진영을 그대로 유지한다 — "매번 같은 사람만 귀신"이 되는 경로다.
+            // 다른 순회(GetGhost, ResetAbsorption 등)는 전부 null을 거르는데 여기만 빠져 있었다.
+            var players = new List<NetworkPlayer>();
+            foreach (var p in NetworkPlayer.All)
+            {
+                if (p != null)
+                {
+                    players.Add(p);
+                }
+            }
+
             if (players.Count == 0)
             {
                 return;
@@ -163,6 +179,9 @@ namespace GhostHunter.Game
                 players[i].IsAlive.Value = true;
                 players[i].IsAbsorbed.Value = false;
             }
+
+            Debug.Log($"[GameManager] 진영 배정: {players.Count}명 중 {ghostIndex}번째"
+                      + $"(클라 {players[ghostIndex].OwnerClientId})가 귀신.");
         }
 
         /// <summary>
@@ -249,6 +268,10 @@ namespace GhostHunter.Game
                     // 현실화: 모습과 소리가 함께 드러난다 (기술 문서 6-1).
                     // 실제로 모습을 드러내는 건 각 클라이언트의 GhostVisibility가
                     // 단계를 보고 알아서 한다 — 여기서 따로 명령하지 않는다.
+                    //
+                    // 영혼이 나가 있는 채로 사냥에 들어갈 수 있다. 합쳐주지 않으면
+                    // 옛 본체 자리에 표식이 계속 남는다 (ServerMergeSoulIntoBody 주석 참고).
+                    MergeGhostSoul();
                     LockGhostBody(false);
                     break;
 
@@ -278,6 +301,29 @@ namespace GhostHunter.Game
             if (ghostController != null)
             {
                 ghostController.SetBodyLocked(locked);
+            }
+        }
+
+        /// <summary>현실화 시 영혼과 본체를 합친다.</summary>
+        private void MergeGhostSoul()
+        {
+            NetworkPlayer.GetGhost()?.GetComponent<GhostController>()?.ServerMergeSoulIntoBody();
+        }
+
+        /// <summary>
+        /// 모든 플레이어의 귀신 상태를 초기화한다.
+        ///
+        /// <b>귀신이었던 사람뿐 아니라 전원에게</b> 돌린다. 다음 판에 누가 귀신이 될지
+        /// 모르는데 지난 판 귀신만 지우면, 그 전 판에 귀신이었던 사람의 찌꺼기가 남는다.
+        /// </summary>
+        private void ResetGhostStates()
+        {
+            foreach (var p in NetworkPlayer.All)
+            {
+                if (p != null)
+                {
+                    p.GetComponent<GhostController>()?.ServerResetForNewRound();
+                }
             }
         }
 
@@ -389,12 +435,9 @@ namespace GhostHunter.Game
                     continue;
                 }
 
-                // 귀신이었다면 본체 고정을 풀어줘야 다음 판에 움직일 수 있다.
-                var ghost = p.GetComponent<GhostController>();
-                if (ghost != null)
-                {
-                    ghost.SetBodyLocked(false);
-                }
+                // 본체 고정뿐 아니라 영혼 분리 상태·본체 좌표까지 지운다.
+                // 고정만 풀면 IsSoulOut이 남아 다음 판에 옛 본체 표식이 그대로 뜬다.
+                p.GetComponent<GhostController>()?.ServerResetForNewRound();
 
                 p.Faction.Value = Faction.Unassigned;
                 p.IsAlive.Value = true;

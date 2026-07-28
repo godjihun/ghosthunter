@@ -63,13 +63,17 @@ namespace GhostHunter.Ghost
         {
             // 내 화면 속 내 몸은 PlayerRoleSetup이 그림자만 남기도록 이미 처리했다.
             // 여기서 또 만지면 서로 덮어써서 원인을 못 찾게 된다.
-            if (IsOwner || !player.IsGhost)
+            if (IsOwner)
             {
                 return;
             }
 
             // 현실화 = 사냥 단계. 그 전까지 귀신은 남의 화면에 존재하지 않는다.
-            bool visible = GameManager.CurrentPhase == GamePhase.Hunt;
+            //
+            // <b>귀신이 아닐 때 그냥 반환하면 안 된다.</b> 렌더러를 끈 주체가 여기이므로
+            // 다시 켜는 것도 여기여야 한다. 조기 반환하면 <b>지난 판에 귀신이었던 플레이어가
+            // 이번 판에 퇴마사가 돼도 꺼진 채로 남아</b> 투명 퇴마사가 된다.
+            bool visible = !player.IsGhost || GameManager.CurrentPhase == GamePhase.Hunt;
 
             if (applied == visible)
             {
