@@ -169,3 +169,6 @@ Packages/packages-lock.json linguist-generated
 
 # Exceptions for .asset files such as lightning pre-baking
 LightingData.asset     binary
+
+# 생성된 충돌 메시 — 텍스트 에셋이지만 20MB대라 일반 git에 두면 안 된다
+Assets/Environments/MainHouse/MansionCollision.asset lfs

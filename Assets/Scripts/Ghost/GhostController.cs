@@ -14,7 +14,7 @@ namespace GhostHunter.Ghost
     /// 영혼은 <b>벽·바닥을 통과하지 못하지만 문은 통과한다</b> — 문을 못 뚫으면
     /// 저절로 열리는 문이 곧 위치 노출이 되기 때문이다.
     ///
-    /// 투명 처리는 렌더러를 끄는 게 아니라 GameManager의 NetworkHide가 담당한다.
+    /// 투명 처리는 <see cref="GhostVisibility"/>가 렌더러를 껐다 켜는 방식으로 담당한다.
     /// 그래서 이 클래스는 가시성을 전혀 건드리지 않는다.
     /// </summary>
     [RequireComponent(typeof(NetworkPlayer))]
@@ -182,6 +182,54 @@ namespace GhostHunter.Ghost
             {
                 cc.enabled = true;
             }
+        }
+
+        /// <summary>
+        /// 현실화(사냥 단계)에서 영혼과 본체를 하나로 합친다. 서버 전용.
+        ///
+        /// <b>영혼이 서 있는 자리가 그대로 본체가 된다.</b> 반대로 본체 자리로 끌어오면
+        /// 사냥이 시작되는 순간 엉뚱한 곳으로 순간이동하는 데다, 숨겨뒀던 본체 위치가
+        /// 그 자리에서 드러난다.
+        ///
+        /// <b>이걸 빠뜨리면 <see cref="IsSoulOut"/>이 true로 남는다.</b> 그러면
+        /// 옛 본체 자리에 표식이 계속 떠 있고, 아래 Update의 조기 반환에 걸려
+        /// <see cref="BodyWorldPosition"/>이 그 좌표에 얼어붙는다 — 실제로 그 버그를 냈다.
+        /// </summary>
+        public void ServerMergeSoulIntoBody()
+        {
+            if (!IsServer)
+            {
+                return;
+            }
+
+            IsSoulOut.Value = false;
+            BodyWorldPosition.Value = transform.position;
+
+            // 복귀 순간이동을 기다리던 중이었다면 취소한다. 이미 합쳐졌으므로
+            // 그대로 두면 대기가 끝날 때까지 본체 좌표 갱신이 멈춘다.
+            awaitingReturn = false;
+            returnTimeout = 0f;
+        }
+
+        /// <summary>
+        /// 다음 판으로 넘어가면 안 되는 상태를 전부 지운다. 서버 전용.
+        ///
+        /// 진영이 바뀌어도 이 컴포넌트는 같은 오브젝트에 그대로 남는다. 값을 안 지우면
+        /// <b>다음 판 귀신이 지난 판의 본체 좌표와 영혼 상태를 물려받는다.</b>
+        /// </summary>
+        public void ServerResetForNewRound()
+        {
+            if (!IsServer)
+            {
+                return;
+            }
+
+            IsSoulOut.Value = false;
+            BodyWorldPosition.Value = transform.position;
+            BodyLocked.Value = false;
+            nullifyTimer = 0f;
+            awaitingReturn = false;
+            returnTimeout = 0f;
         }
 
         /// <summary>은신 종료 후 본체를 고정한다. 페널티 중에만 풀린다. 서버 전용.</summary>

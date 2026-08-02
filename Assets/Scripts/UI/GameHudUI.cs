@@ -295,6 +295,13 @@ namespace GhostHunter.UI
                 return;
             }
 
+            // 영혼 분리는 조사 단계 전용이다(GhostController.ToggleSoulRpc).
+            // 다른 단계에서 안내를 띄우면 Q를 눌러도 아무 일이 없어 고장으로 오해한다.
+            if (GameManager.CurrentPhase != GamePhase.Investigation)
+            {
+                return;
+            }
+
             bool soulOut = ghost.IsSoulOut.Value;
             var hint = new Rect(Screen.width * 0.5f - 150f, Screen.height - 78f, 300f, 22f);
             GUI.DrawTexture(hint, barBack);

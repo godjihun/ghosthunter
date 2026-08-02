@@ -19,10 +19,6 @@ namespace GhostHunter.Player
         [Tooltip("캐릭터 모델의 Animator. 진영에 따라 다른 모델을 쓰므로 런타임에 찾는다.")]
         [SerializeField] private Animator animator;
 
-        [Tooltip("달리기 클립이 만들어진 기준 속도(m/s). 실제 속도를 이 값으로 나눠 재생 배속을 정한다. " +
-                 "Mixamo 달리기는 대략 4.5m/s 보폭으로 만들어져 있다.")]
-        [SerializeField] private float referenceSpeed = 4.5f;
-
         [Tooltip("재생 배속의 하한·상한. 너무 넓게 두면 발이 헛돌거나 슬로우모션이 된다.")]
         [SerializeField] private float minRate = 0.6f;
         [SerializeField] private float maxRate = 1.8f;
@@ -41,6 +37,16 @@ namespace GhostHunter.Player
         /// 실제로 1.9초 → 0.83초 → 1.4초 → 0.6초로 여러 번 바뀌었다.
         /// </summary>
         private float jumpClipLength;
+
+        /// <summary>
+        /// 걷기·달리기 클립이 <b>실제로</b> 만들어진 보폭 속도(m/s). 클립에서 직접 읽는다.
+        ///
+        /// 손으로 적어두면 클립을 갈아끼울 때 조용히 어긋난다 — 실제로 4.5로 적어뒀는데
+        /// 진짜 값은 4.635였고, 블렌드 임계값은 아예 게임 속도(4/8)로 잡혀 있어
+        /// <b>4m/s로 달리면서 1.6m/s 보폭으로 걷는</b> 상태였다.
+        /// </summary>
+        private float walkClipSpeed;
+        private float runClipSpeed;
 
         private NetworkPlayer player;
         private PlayerEmote emote;
@@ -66,13 +72,19 @@ namespace GhostHunter.Player
         public void ResolveAnimator()
         {
             animator = GetComponentInChildren<Animator>(true);
-            CacheJumpClipLength();
+            CacheClipMetrics();
         }
 
-        /// <summary>컨트롤러에 물린 점프 클립의 실제 길이를 읽어둔다.</summary>
-        private void CacheJumpClipLength()
+        /// <summary>
+        /// 컨트롤러에 물린 클립에서 점프 길이와 이동 보폭 속도를 읽어둔다.
+        /// 에셋에 있는 값을 코드에 옮겨 적지 않기 위한 것이다.
+        /// </summary>
+        private void CacheClipMetrics()
         {
             jumpClipLength = 0f;
+            walkClipSpeed = 0f;
+            runClipSpeed = 0f;
+
             if (animator == null || animator.runtimeAnimatorController == null)
             {
                 return;
@@ -80,12 +92,31 @@ namespace GhostHunter.Player
 
             foreach (var c in animator.runtimeAnimatorController.animationClips)
             {
-                if (c != null && c.name.IndexOf("Jump", System.StringComparison.OrdinalIgnoreCase) >= 0)
+                if (c == null)
+                {
+                    continue;
+                }
+
+                if (jumpClipLength <= 0f && c.name.IndexOf("Jump", System.StringComparison.OrdinalIgnoreCase) >= 0)
                 {
                     jumpClipLength = c.length;
-                    return;
+                }
+                else if (walkClipSpeed <= 0f && c.name.IndexOf("Walk", System.StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    walkClipSpeed = HorizontalSpeedOf(c);
+                }
+                else if (runClipSpeed <= 0f && c.name.IndexOf("Run", System.StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    runClipSpeed = HorizontalSpeedOf(c);
                 }
             }
+        }
+
+        /// <summary>클립의 루트 모션이 초당 얼마나 나아가는가. 수직 성분은 보폭과 무관하므로 뺀다.</summary>
+        private static float HorizontalSpeedOf(AnimationClip clip)
+        {
+            var v = clip.averageSpeed;
+            return new Vector2(v.x, v.z).magnitude;
         }
 
         private void Update()
@@ -108,19 +139,35 @@ namespace GhostHunter.Player
             float speed = Time.deltaTime > 0f ? delta.magnitude / Time.deltaTime : 0f;
             animator.SetFloat(SpeedHash, speed, 0.1f, Time.deltaTime);
 
-            // 클립을 실제 속도에 맞춰 배속한다. 이게 없으면 발이 땅에서 미끄러진다.
-            //
-            // 기준은 <b>클립이 만들어진 보폭 속도</b>여야 한다. 게임의 이동 속도를 기준으로 삼으면
-            // 배속이 항상 1이 되어, 클립보다 빠르게 움직일 때 발이 뒤처진다.
-            float rate = referenceSpeed > 0.01f
-                ? Mathf.Clamp(speed / referenceSpeed, minRate, maxRate)
-                : 1f;
-            animator.SetFloat("SpeedMultiplier", speed > 0.1f ? rate : 1f);
+            animator.SetFloat("SpeedMultiplier", speed > 0.1f ? ComputeMoveRate(speed) : 1f);
 
             animator.SetBool(DeadHash, !player.IsAlive.Value);
 
             int emoteIndex = emote != null ? emote.CurrentEmote.Value : -1;
             animator.SetInteger(EmoteHash, emoteIndex);
+        }
+
+        /// <summary>
+        /// 이동 클립의 재생 배속. 발이 땅에서 미끄러지지 않게 하는 것이 목적이다.
+        ///
+        /// <b>블렌드 트리 임계값이 각 클립의 보폭 속도로 맞춰져 있다는 전제</b>다. 그러면
+        /// 걷기~달리기 구간 안에서는 블렌드 자체가 이미 올바른 보폭을 만들어내므로
+        /// 배속은 1이어야 한다. 여기에 또 <c>speed / 기준속도</c>를 곱하면 이중 보정이라
+        /// 오히려 느려진다 — 이전 구현이 그래서 틀렸다.
+        ///
+        /// 보정이 필요한 건 <b>구간 바깥</b>뿐이다. 달리기보다 빠르면(질주) 클립이 못 따라가고,
+        /// 걷기보다 느리면 대기 자세와 섞이며 보폭만 줄어 발이 헛돈다.
+        /// </summary>
+        private float ComputeMoveRate(float speed)
+        {
+            if (walkClipSpeed <= 0.01f || runClipSpeed <= 0.01f)
+            {
+                return 1f;
+            }
+
+            // 구간 안이면 speed 그대로 → 배속 1. 바깥이면 가장 가까운 클립 속도로 잘린다.
+            float natural = Mathf.Clamp(speed, walkClipSpeed, runClipSpeed);
+            return Mathf.Clamp(speed / natural, minRate, maxRate);
         }
 
         /// <summary>도구를 주웠을 때 한 번 재생. ExorcistInventory가 호출한다.</summary>
