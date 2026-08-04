@@ -106,9 +106,21 @@ namespace GhostHunter.UI
             }
 
             EnsureStyles();
+
+            // 관전 중에는 조준점·프롬프트·인벤토리가 전부 의미가 없다.
+            // 남의 시점을 보는데 내 조작 UI가 떠 있으면 조작되는 줄 안다.
+            var spectator = local.GetComponent<PlayerSpectator>();
+            if (spectator != null && spectator.IsSpectating)
+            {
+                DrawMaterializeGauge();
+                DrawSpectatorPanel(spectator);
+                return;
+            }
+
             DrawCrosshair();
 
             // 도구·문 프롬프트는 양쪽 진영 공통.
+            DrawMaterializeGauge();
             DrawInteractPrompt(local);
             DrawAltarPanel();
             DrawHidingNotice(local);
@@ -118,12 +130,164 @@ namespace GhostHunter.UI
             {
                 DrawFearSkillPrompt(local);
                 DrawSoulState(local);
+                DrawGhostSkillBar(local);
             }
             else
             {
                 DrawInventorySlot(local);
                 DrawDetectionResult();
             }
+        }
+
+        /// <summary>
+        /// 현실화 게이지 (시나리오 3-4, UI 명세 S5-A).
+        ///
+        /// <b>양 진영 모두에게 보여준다.</b> 게이지는 위치 정보를 담지 않으므로 공개해도
+        /// 은닉이 깨지지 않고, 퇴마사에게는 "현실화가 임박했다"는 압박이 된다.
+        ///
+        /// 조사 단계에만 띄운다 — 사냥에 들어가면 이미 현실화된 뒤라 진행도가 의미 없고,
+        /// 그 자리는 남은 사냥 시간이 대신한다.
+        /// </summary>
+        private void DrawMaterializeGauge()
+        {
+            var manager = GameManager.Instance;
+            if (manager == null || manager.Phase.Value != GamePhase.Investigation)
+            {
+                return;
+            }
+
+            float ratio = Mathf.Clamp01(manager.MaterializeGauge.Value / 100f);
+
+            const float width = 260f;
+            const float height = 18f;
+            var back = new Rect(Screen.width * 0.5f - width * 0.5f, 14f, width, height);
+
+            GUI.DrawTexture(back, barBack);
+            if (ratio > 0f)
+            {
+                GUI.DrawTexture(new Rect(back.x, back.y, back.width * ratio, back.height), barFill);
+            }
+
+            GUI.Label(back, $"현실화 {manager.MaterializeGauge.Value:F0}%", slotLabelStyle);
+        }
+
+        /// <summary>
+        /// 관전 화면 (시나리오 3-6 / UI 명세 S6).
+        ///
+        /// 하단 중앙에 대상 닉네임, 그 좌우에 화살표를 둔다.
+        /// 화살표는 <b>클릭도 되고 A/D로도 된다</b> — 관전 중에는 커서가 잠겨 있어
+        /// 실제로는 키보드를 쓰게 되지만, 무엇을 누르면 되는지 눈에 보여야 한다.
+        /// </summary>
+        private void DrawSpectatorPanel(PlayerSpectator spectator)
+        {
+            var banner = new Rect(Screen.width * 0.5f - 130f, 44f, 260f, 26f);
+            GUI.DrawTexture(banner, barBack);
+            GUI.Label(banner, "사망 — 관전 중", resultStyle);
+
+            float cx = Screen.width * 0.5f;
+            float y = Screen.height - 78f;
+
+            if (spectator.Target == null)
+            {
+                var none = new Rect(cx - 150f, y, 300f, 26f);
+                GUI.DrawTexture(none, barBack);
+                GUI.Label(none, "관전할 수 있는 생존자가 없습니다", slotLabelStyle);
+                return;
+            }
+
+            var name = new Rect(cx - 90f, y, 180f, 26f);
+            GUI.DrawTexture(name, barBack);
+            GUI.Label(name, spectator.Target.DisplayName, slotLabelStyle);
+
+            var left = new Rect(name.x - 34f, y, 30f, 26f);
+            var right = new Rect(name.xMax + 4f, y, 30f, 26f);
+            GUI.DrawTexture(left, barBack);
+            GUI.DrawTexture(right, barBack);
+            GUI.Label(left, "◀", slotLabelStyle);
+            GUI.Label(right, "▶", slotLabelStyle);
+
+            var hint = new Rect(cx - 150f, y + 28f, 300f, 20f);
+            GUI.Label(hint, "A / D 로 대상 변경", slotLabelStyle);
+        }
+
+        /// <summary>
+        /// 귀신 전용 스킬바 (좌하단).
+        ///
+        /// 단계에 따라 첫 칸의 내용이 바뀐다 — 조사에서는 <b>공포스킬</b>, 사냥에서는 <b>킬</b>이다.
+        /// 같은 `Ctrl` 키가 하는 일이 달라지므로, 칸 자체가 바뀌어야 지금 뭘 하는지 알 수 있다.
+        ///
+        /// <b>흐릿함 = 지금은 못 쓴다</b>는 뜻이다. 대상이 사거리에 들어오면 밝아진다.
+        /// 쿨타임 중에는 남은 초를 대신 보여준다.
+        /// </summary>
+        private void DrawGhostSkillBar(NetworkPlayer local)
+        {
+            var fear = local.GetComponent<FearSkill>();
+            var ghost = local.GetComponent<GhostController>();
+            var phase = GameManager.CurrentPhase;
+
+            const float w = 190f;
+            const float h = 38f;
+            const float gap = 6f;
+            float x = 16f;
+            float y = Screen.height - 16f - h;
+
+            // 아래에서 위로 쌓는다. 영혼 분리는 조사 단계에만 의미가 있다.
+            if (phase == GamePhase.Investigation && ghost != null)
+            {
+                bool soulOut = ghost.IsSoulOut.Value;
+                DrawSkillSlot(new Rect(x, y, w, h),
+                    soulOut ? "본체로 복귀" : "영혼 분리", "Q",
+                    active: true, cooldown: 0f);
+                y -= h + gap;
+            }
+
+            if (fear == null)
+            {
+                return;
+            }
+
+            // 사냥 단계에서는 같은 자리가 처형으로 바뀐다.
+            bool hunt = phase == GamePhase.Hunt;
+            string label = hunt ? "킬" : "공포스킬";
+
+            // 조사 단계의 흡수는 영혼 상태에서만 쓸 수 있다.
+            bool phaseOk = hunt || (phase == GamePhase.Investigation
+                                    && ghost != null && ghost.IsSoulOut.Value);
+
+            DrawSkillSlot(new Rect(x, y, w, h), label, "Ctrl",
+                active: phaseOk && fear.HasTargetInRange && fear.CooldownRemaining <= 0f,
+                cooldown: fear.CooldownRemaining);
+        }
+
+        /// <summary>스킬 한 칸. 쓸 수 없으면 전체를 흐리게 그린다.</summary>
+        private void DrawSkillSlot(Rect rect, string label, string key, bool active, float cooldown)
+        {
+            var prev = GUI.color;
+
+            // 흐리게 만드는 건 알파가 아니라 색 전체다 — 배경까지 같이 흐려져야
+            // "꺼져 있다"로 읽힌다. 알파만 낮추면 그냥 반투명 UI로 보인다.
+            GUI.color = active ? Color.white : new Color(1f, 1f, 1f, 0.35f);
+
+            GUI.DrawTexture(rect, barBack);
+
+            // 쓸 수 있을 때만 왼쪽에 강조 띠를 둔다. 눈이 여기부터 간다.
+            if (active)
+            {
+                GUI.DrawTexture(new Rect(rect.x, rect.y, 4f, rect.height), barFill);
+            }
+
+            var textRect = new Rect(rect.x + 12f, rect.y, rect.width - 24f, rect.height);
+
+            if (cooldown > 0f)
+            {
+                GUI.Label(textRect, label + "   " + Mathf.CeilToInt(cooldown) + "초", slotLabelStyle);
+            }
+            else
+            {
+                GUI.Label(textRect, label + "   [" + key + "]", slotLabelStyle);
+            }
+
+            GUI.color = prev;
         }
 
         /// <summary>탐지 결과를 화면 중앙 위쪽에 띄운다. 본인에게만 보인다.</summary>

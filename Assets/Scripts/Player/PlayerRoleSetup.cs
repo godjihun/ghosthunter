@@ -204,6 +204,14 @@ namespace GhostHunter.Player
                 return;
             }
 
+            // 관전 중에는 PlayerSpectator가 카메라를 월드 좌표로 직접 잡는다.
+            // 둘 다 손대면 매 프레임 서로 덮어써서 화면이 떨린다.
+            var spectator = GetComponent<PlayerSpectator>();
+            if (spectator != null && spectator.IsSpectating)
+            {
+                return;
+            }
+
             bool wantThirdPerson = emote.IsEmoting;
             var camT = playerCamera.transform;
 

@@ -25,9 +25,12 @@ namespace GhostHunter.Player
 
         public Transform CameraPivot => cameraPivot;
 
+        private NetworkPlayer player;
+
         private void Awake()
         {
             emote = GetComponent<PlayerEmote>();
+            player = GetComponent<NetworkPlayer>();
         }
 
         public override void OnNetworkSpawn()
@@ -46,6 +49,16 @@ namespace GhostHunter.Player
             // 커서 잠금은 PlayerRoleSetup이 단독으로 관리한다 (여기서 만지지 말 것).
             if (!IsOwner || !GameManager.IsGameplayActive)
             {
+                return;
+            }
+
+            // 죽으면 시점을 멈춘다. 관전으로 넘어가면 액션맵이 바뀌어 통지가 끊기는데,
+            // <b>lookInput은 마지막 값을 그대로 들고 있다</b> — 죽는 순간 마우스를 움직이고
+            // 있었다면 시체가 영원히 제자리에서 돈다. 카메라는 관전자가 따로 잡으므로
+            // 여기서 멈춰도 화면에는 영향이 없다.
+            if (player != null && !player.IsAlive.Value)
+            {
+                lookInput = Vector2.zero;
                 return;
             }
 
