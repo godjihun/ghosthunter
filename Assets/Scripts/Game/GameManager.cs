@@ -98,6 +98,21 @@ namespace GhostHunter.Game
             NetworkVariableReadPermission.Everyone,
             NetworkVariableWritePermission.Server);
 
+        /// <summary>
+        /// 현실화 게이지 0~100 (시나리오 3-4).
+        ///
+        /// 공포스킬이 성공할 때마다 오르고 100에 닿으면 사냥 단계로 넘어간다.
+        /// <b>양 진영 모두에게 공개한다</b> — 위치 정보를 담지 않으므로 공개해도 은닉이 깨지지 않고,
+        /// 퇴마사에게는 "현실화가 얼마나 임박했는가"라는 압박이 된다.
+        ///
+        /// 이 값이 인원수와 무관하다는 점이 중요하다. 예전의 "생존 퇴마사 전원 흡수" 조건은
+        /// 제단 오답으로 누가 죽는 순간 달성 불가가 되는 예외를 안고 있었는데, 게이지에는 그 문제가 없다.
+        /// </summary>
+        public readonly NetworkVariable<float> MaterializeGauge = new(
+            0f,
+            NetworkVariableReadPermission.Everyone,
+            NetworkVariableWritePermission.Server);
+
         /// <summary>서버만 아는 진짜 약점. 절대 공개 NetworkVariable에 넣지 말 것.</summary>
         private WeaknessSet serverWeakness;
 
@@ -138,6 +153,7 @@ namespace GhostHunter.Game
 
             // 스폰 배치가 끝난 뒤에 초기화해야 본체 좌표가 시작 위치로 잡힌다.
             ResetGhostStates();
+            MaterializeGauge.Value = 0f;
 
             ToolSpawner.Instance?.SpawnAllTools(config);
             Altar.Instance?.ServerClear();
@@ -157,7 +173,7 @@ namespace GhostHunter.Game
             // 비정상 종료로 despawn 콜백을 놓치면 죽은 참조가 남는다. 그대로 두면
             // Faction 대입에서 예외가 터지며 <b>루프가 중간에 끊겨</b>, 뒤쪽 플레이어들이
             // 지난 판 진영을 그대로 유지한다 — "매번 같은 사람만 귀신"이 되는 경로다.
-            // 다른 순회(GetGhost, ResetAbsorption 등)는 전부 null을 거르는데 여기만 빠져 있었다.
+            // 다른 순회(GetGhost, ResetGhostStates 등)는 전부 null을 거르는데 여기만 빠져 있었다.
             var players = new List<NetworkPlayer>();
             foreach (var p in NetworkPlayer.All)
             {
@@ -177,7 +193,6 @@ namespace GhostHunter.Game
             {
                 players[i].Faction.Value = i == ghostIndex ? Faction.Ghost : Faction.Exorcist;
                 players[i].IsAlive.Value = true;
-                players[i].IsAbsorbed.Value = false;
             }
 
             Debug.Log($"[GameManager] 진영 배정: {players.Count}명 중 {ghostIndex}번째"
@@ -228,21 +243,16 @@ namespace GhostHunter.Game
             }
         }
 
+        /// <summary>
+        /// 플레이어를 특정 자리로 옮긴다.
+        ///
+        /// <b>서버가 transform을 직접 바꾸면 안 된다.</b> 위치가 소유자 권한이라
+        /// 다음 프레임에 소유자 좌표로 덮어써진다 — 호스트만 옮겨지고 나머지는
+        /// 제자리에 남는다. 실제 이동은 소유자에게 시킨다 (NetworkPlayer.TeleportRpc).
+        /// </summary>
         private static void TeleportPlayer(NetworkPlayer player, Vector3 position, Quaternion rotation)
         {
-            // CharacterController가 켜져 있으면 위치 대입이 무시되므로 잠깐 끈다.
-            var cc = player.GetComponent<CharacterController>();
-            if (cc != null)
-            {
-                cc.enabled = false;
-            }
-
-            player.transform.SetPositionAndRotation(position, rotation);
-
-            if (cc != null)
-            {
-                cc.enabled = true;
-            }
+            player.TeleportRpc(position, rotation);
         }
 
         // ── 단계 전이 ──────────────────────────────────────────────
@@ -273,6 +283,9 @@ namespace GhostHunter.Game
                     // 옛 본체 자리에 표식이 계속 남는다 (ServerMergeSoulIntoBody 주석 참고).
                     MergeGhostSoul();
                     LockGhostBody(false);
+
+                    // 흡수 쿨타임(30초)을 처형에 물려주면 1분짜리 사냥이 절반 날아간다.
+                    ResetGhostCooldown();
                     break;
 
                 case GamePhase.Result:
@@ -310,6 +323,12 @@ namespace GhostHunter.Game
             NetworkPlayer.GetGhost()?.GetComponent<GhostController>()?.ServerMergeSoulIntoBody();
         }
 
+        /// <summary>귀신의 공포스킬 쿨타임을 0으로 되돌린다.</summary>
+        private void ResetGhostCooldown()
+        {
+            NetworkPlayer.GetGhost()?.GetComponent<Ghost.FearSkill>()?.ServerResetCooldown();
+        }
+
         /// <summary>
         /// 모든 플레이어의 귀신 상태를 초기화한다.
         ///
@@ -320,10 +339,16 @@ namespace GhostHunter.Game
         {
             foreach (var p in NetworkPlayer.All)
             {
-                if (p != null)
+                if (p == null)
                 {
-                    p.GetComponent<GhostController>()?.ServerResetForNewRound();
+                    continue;
                 }
+
+                p.GetComponent<GhostController>()?.ServerResetForNewRound();
+
+                // 쿨타임도 판을 넘어가면 안 된다. 지난 판 끝에 스킬을 썼다면
+                // 새 판이 시작되자마자 쓸 수 없는 상태로 출발한다.
+                p.GetComponent<Ghost.FearSkill>()?.ServerResetCooldown();
             }
         }
 
@@ -428,6 +453,10 @@ namespace GhostHunter.Game
             ToolSpawner.Instance?.DespawnAll();
             Altar.Instance?.ServerClear();
 
+            // 영혼 상태·본체 좌표·본체 고정·쿨타임을 한 번에 지운다.
+            // 하나라도 남으면 새 판이 이전 판 상태를 물려받는다.
+            ResetGhostStates();
+
             foreach (var p in NetworkPlayer.All)
             {
                 if (p == null)
@@ -435,19 +464,15 @@ namespace GhostHunter.Game
                     continue;
                 }
 
-                // 본체 고정뿐 아니라 영혼 분리 상태·본체 좌표까지 지운다.
-                // 고정만 풀면 IsSoulOut이 남아 다음 판에 옛 본체 표식이 그대로 뜬다.
-                p.GetComponent<GhostController>()?.ServerResetForNewRound();
-
                 p.Faction.Value = Faction.Unassigned;
                 p.IsAlive.Value = true;
-                p.IsAbsorbed.Value = false;
                 p.Weakness.Value = default;
             }
 
             serverWeakness = default;
             RevealedWeakness.Value = default;
             Result.Value = GameResult.None;
+            MaterializeGauge.Value = 0f;
 
             Phase.Value = GamePhase.Lobby;
             PhaseTimeRemaining.Value = 0f;
@@ -469,48 +494,29 @@ namespace GhostHunter.Game
                 return;
             }
 
-            // 사망으로 "흡수되지 않은 생존자"가 사라졌을 수 있다 → 현실화 조건 재확인.
-            CheckMaterializationCondition();
+            // 게이지는 인원수와 무관하므로 사망으로 현실화 조건이 바뀌지 않는다.
+            // 예전에는 여기서 "흡수되지 않은 생존자가 사라졌는지"를 다시 확인해야 했다.
         }
 
         /// <summary>
-        /// 현실화 조건은 "흡수되지 않은 생존 퇴마사가 0명"이다 (시나리오 3-4).
+        /// 공포스킬 성공 시 현실화 게이지를 올린다 (시나리오 3-4). 서버 전용.
         ///
-        /// 흡수 카운트와 총 인원을 비교하면 안 된다 — 제단 오답으로 누가 죽는 순간
-        /// 조건이 영영 달성 불가능해져 게임이 멈춘다.
+        /// 100에 닿으면 곧바로 사냥 단계로 넘어간다. 조사 단계가 아니면 아무것도 하지 않는다 —
+        /// 사냥 중의 처형까지 게이지를 올리면 의미가 없다.
         /// </summary>
-        public void CheckMaterializationCondition()
+        public void ServerAddMaterializeGauge(float amount)
         {
             if (!IsServer || Phase.Value != GamePhase.Investigation)
             {
                 return;
             }
 
-            foreach (var p in NetworkPlayer.GetLivingExorcists())
-            {
-                if (!p.IsAbsorbed.Value)
-                {
-                    return; // 아직 남아 있다
-                }
-            }
+            MaterializeGauge.Value = Mathf.Clamp(MaterializeGauge.Value + amount, 0f, 100f);
+            Debug.Log($"[GameManager] 현실화 게이지 {MaterializeGauge.Value:F0}%");
 
-            EnterPhase(GamePhase.Hunt);
-        }
-
-        /// <summary>탐지당하면 영혼 수집이 초기화된다 (시나리오 3-4).</summary>
-        public void ResetAbsorption()
-        {
-            if (!IsServer)
+            if (MaterializeGauge.Value >= 100f)
             {
-                return;
-            }
-
-            foreach (var p in NetworkPlayer.All)
-            {
-                if (p != null && p.IsExorcist)
-                {
-                    p.IsAbsorbed.Value = false;
-                }
+                EnterPhase(GamePhase.Hunt);
             }
         }
     }

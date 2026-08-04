@@ -163,10 +163,11 @@ namespace GhostHunter.Exorcist
 
             if (detected)
             {
-                // 페널티: 영혼 강제 복귀 + 도구 무효화 + 영혼 수집 초기화 (시나리오 3-4, 3-5)
+                // 페널티: 영혼 강제 복귀 + 도구 무효화 + 본체 이동 허용 (시나리오 3-5).
+                // <b>현실화 게이지는 건드리지 않는다</b> — 탐지의 대가는 게이지가 아니라
+                // 강제 복귀와 위치 노출이다 (시나리오 3-4).
                 var ghost = NetworkPlayer.GetGhost();
                 ghost?.GetComponent<GhostController>()?.ServerApplyDetectionPenalty();
-                GameManager.Instance?.ResetAbsorption();
             }
 
             // ⚠️ 성공이든 실패든 반드시 응답을 보낸다.

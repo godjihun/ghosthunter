@@ -259,6 +259,14 @@ namespace GhostHunter.Game
 
                 GUILayout.Space(8);
 
+                // 닉네임은 접속 전에 정해야 한다. 스폰 순간 서버로 올라가므로
+                // 접속한 뒤에 바꾸면 이번 판에는 반영되지 않는다.
+                GUILayout.Label("닉네임");
+                NetworkPlayer.LocalNickname = GUILayout.TextField(
+                    NetworkPlayer.LocalNickname ?? string.Empty, 10, GUILayout.Height(24));
+
+                GUILayout.Space(8);
+
                 GUI.enabled = !busy;
                 if (GUILayout.Button("호스트로 시작", GUILayout.Height(36)))
                 {
@@ -361,6 +369,13 @@ namespace GhostHunter.Game
             GUILayout.Label($"단계: {PhaseText(manager.Phase.Value)}");
             GUILayout.Label($"남은 시간: {Mathf.CeilToInt(manager.PhaseTimeRemaining.Value)}초");
 
+            // 현실화 게이지는 조사 단계에만 의미가 있다. 사냥에 들어가면
+            // 이미 현실화된 뒤이므로 남은 사냥 시간이 그 자리를 대신한다.
+            if (manager.Phase.Value == GamePhase.Investigation)
+            {
+                GUILayout.Label($"현실화: {manager.MaterializeGauge.Value:F0}%");
+            }
+
             var local = NetworkPlayer.GetLocal();
             if (local != null)
             {
@@ -374,7 +389,7 @@ namespace GhostHunter.Game
                 }
                 else
                 {
-                    GUILayout.Label(local.IsAbsorbed.Value ? "영혼을 흡수당했다" : "정상");
+                    GUILayout.Label(local.IsAlive.Value ? "생존" : "사망");
 
                     var inventory = local.GetComponent<Exorcist.ExorcistInventory>();
                     if (inventory != null)

@@ -29,6 +29,11 @@ namespace GhostHunter.Core
         [Tooltip("도구 사용 시 탐지 반경(m). 이 값이 난이도에 가장 직접적이다.")]
         public float DetectionRadius = 3f;
 
+        [Tooltip("공포스킬 1회 성공 시 현실화 게이지 상승량(%). " +
+                 "쿨타임과 곱해져 최소 현실화 시간을 만든다 — 기본값이면 30초 × 5회 = 2분. " +
+                 "둘 중 하나만 바꿔도 판의 성격이 달라지므로 항상 함께 볼 것.")]
+        public float AbsorbGaugePerHit = 20f;
+
         [Header("── 고정 상수 (조절 불가) ──")]
 
         [Tooltip("사냥 단계 지속 시간.")]
