@@ -32,6 +32,35 @@ namespace GhostHunter.Game
         /// <summary>호스트 시작을 재시도할 남은 시간. 0이면 재시도 안 함.</summary>
         private float hostRetryTimer;
 
+        /// <summary>참가 코드 입력란. Relay가 발급하는 코드는 6자 안팎이다.</summary>
+        private string joinCodeInput = string.Empty;
+
+        /// <summary>
+        /// 방 만들기. <b>결과를 기다리는 동안 UI를 막아야 한다</b> —
+        /// Relay 할당은 네트워크 왕복이라 즉시 끝나지 않는다.
+        /// </summary>
+        private async System.Threading.Tasks.Task HostAsync()
+        {
+            bool ok = await RelayConnection.StartHostAsync();
+            statusMessage = ok
+                ? $"방을 만들었습니다. 참가 코드: {RelayConnection.JoinCode}"
+                : RelayConnection.LastError;
+        }
+
+        private async System.Threading.Tasks.Task JoinAsync(string code)
+        {
+            bool ok = await RelayConnection.StartClientAsync(code);
+            if (!ok)
+            {
+                statusMessage = RelayConnection.LastError;
+                connectTimeout = 0f;
+            }
+            else
+            {
+                statusMessage = null;
+            }
+        }
+
         /// <summary>다음 프레임에 Shutdown을 실행해야 하는가. 아래 RequestShutdown 주석 참고.</summary>
         private bool shutdownRequested;
         private string pendingMessage;
@@ -186,6 +215,9 @@ namespace GhostHunter.Game
 
         private void OnGUI()
         {
+            // 기본 폰트에는 한글 글리프가 없어 빌드에서 글자가 사라진다 (UI.HudFont 참고).
+            UI.HudFont.ApplyToSkin();
+
             var nm = NetworkManager.Singleton;
             if (nm == null)
             {
@@ -267,32 +299,27 @@ namespace GhostHunter.Game
 
                 GUILayout.Space(8);
 
-                GUI.enabled = !busy;
-                if (GUILayout.Button("호스트로 시작", GUILayout.Height(36)))
+                // 참가 코드
+                GUILayout.Label("참가 코드 (참가할 때만)");
+                joinCodeInput = GUILayout.TextField(joinCodeInput ?? string.Empty, 8, GUILayout.Height(24));
+
+                GUILayout.Space(8);
+
+                GUI.enabled = !busy && !RelayConnection.IsBusy;
+
+                if (GUILayout.Button("방 만들기", GUILayout.Height(36)))
                 {
-                    if (!nm.StartHost())
-                    {
-                        // 포트가 아직 안 풀렸을 수 있다. 잠깐 기다렸다 알아서 재시도한다.
-                        hostRetryTimer = HostRetrySeconds;
-                        statusMessage = "포트가 풀리기를 기다리는 중…";
-                    }
-                    else
-                    {
-                        statusMessage = null;
-                    }
+                    statusMessage = "방을 만드는 중…";
+                    _ = HostAsync();
                 }
-                if (GUILayout.Button("클라이언트로 접속", GUILayout.Height(36)))
+
+                if (GUILayout.Button("코드로 참가", GUILayout.Height(36)))
                 {
-                    if (nm.StartClient())
-                    {
-                        statusMessage = null;
-                        connectTimeout = ConnectTimeoutSeconds;
-                    }
-                    else
-                    {
-                        statusMessage = "접속을 시작하지 못했습니다.";
-                    }
+                    statusMessage = "참가하는 중…";
+                    connectTimeout = ConnectTimeoutSeconds;
+                    _ = JoinAsync(joinCodeInput);
                 }
+
                 GUI.enabled = true;
 
                 GUILayout.EndArea();
@@ -300,6 +327,13 @@ namespace GhostHunter.Game
             }
 
             GUILayout.Label(nm.IsHost ? "모드: 호스트(방장)" : nm.IsServer ? "모드: 서버" : "모드: 클라이언트");
+
+            // 참가 코드는 방장이 상대에게 알려줘야 하므로 접속 후에도 계속 보여준다.
+            if (!string.IsNullOrEmpty(RelayConnection.JoinCode))
+            {
+                GUILayout.Label($"참가 코드: {RelayConnection.JoinCode}");
+            }
+
             GUILayout.Label($"접속 인원: {NetworkPlayer.All.Count}명");
             GUILayout.Space(8);
 

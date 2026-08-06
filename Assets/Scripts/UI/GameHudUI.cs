@@ -94,6 +94,10 @@ namespace GhostHunter.UI
 
         private void OnGUI()
         {
+            // 기본 폰트에는 한글 글리프가 없다. 빌드에서 글자가 통째로 사라지므로
+            // 그리기 전에 스킨 폰트를 갈아둔다 (HudFont 주석 참고).
+            HudFont.ApplyToSkin();
+
             if (!GameManager.IsGameplayActive)
             {
                 return;
