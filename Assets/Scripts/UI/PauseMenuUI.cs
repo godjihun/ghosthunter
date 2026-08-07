@@ -6,11 +6,15 @@ using UnityEngine.InputSystem;
 namespace GhostHunter.UI
 {
     /// <summary>
-    /// ESC로 여는 일시정지 창. 설정과 나가기.
+    /// 백틱(`)으로 여는 일시정지 창. 설정과 나가기.
     ///
-    /// <b>ESC는 액션맵을 거치지 않고 키보드를 직접 읽는다.</b> 액션맵은 진영·상태에 따라
+    /// <b>ESC를 쓰면 안 된다.</b> 브라우저가 ESC를 포인터 잠금 해제·전체화면 종료에
+    /// 먼저 써버려서 Unity까지 오지 않는다 — 웹 빌드에서 창이 아예 안 열린다.
+    /// 백틱은 브라우저가 가로채지 않는다.
+    ///
+    /// <b>키는 액션맵을 거치지 않고 키보드를 직접 읽는다.</b> 액션맵은 진영·상태에 따라
     /// Exorcist / Ghost / Spectator로 갈리는데, 이 창은 <b>어느 상태에서든</b> 열려야 한다.
-    /// 네 맵 모두에 같은 액션을 넣으면 하나 빠뜨렸을 때 "특정 상황에서만 ESC가 안 되는"
+    /// 네 맵 모두에 같은 액션을 넣으면 하나 빠뜨렸을 때 "특정 상황에서만 안 되는"
     /// 찾기 어려운 버그가 된다. 레거시 Input Manager가 아니라 새 Input System의 API다.
     /// </summary>
     public class PauseMenuUI : MonoBehaviour
@@ -24,22 +28,29 @@ namespace GhostHunter.UI
 
         private GUIStyle titleStyle;
 
+        /// <summary>지난 프레임에 포인터가 잠겨 있었는가. 아래 Update 주석 참고.</summary>
+        private bool wasLocked;
+
         private void Update()
         {
-            var keyboard = Keyboard.current;
-            if (keyboard == null || !keyboard.escapeKey.wasPressedThisFrame)
-            {
-                return;
-            }
-
             // 접속 전(로비 화면)에는 열 이유가 없다. 거기엔 이미 나가는 버튼이 있고,
             // 커서도 원래 풀려 있다.
-            if (NetworkPlayer.GetLocal() == null)
+            bool hasBody = NetworkPlayer.GetLocal() != null;
+
+            DetectPointerLockLost(hasBody);
+
+            var keyboard = Keyboard.current;
+            if (keyboard == null || !keyboard.backquoteKey.wasPressedThisFrame)
             {
                 return;
             }
 
-            // 설정을 열어둔 채 ESC를 누르면 설정만 닫는다. 한 번에 다 닫히면
+            if (!hasBody)
+            {
+                return;
+            }
+
+            // 설정을 열어둔 채 다시 누르면 설정만 닫는다. 한 번에 다 닫히면
             // 되돌아갈 방법이 없어 답답하다.
             if (open && settingsOpen)
             {
@@ -48,6 +59,38 @@ namespace GhostHunter.UI
             }
 
             SetOpen(!open);
+        }
+
+        /// <summary>
+        /// 포인터 잠금이 풀리는 순간을 잡아 메뉴를 연다. <b>ESC를 되살리는 우회로다.</b>
+        ///
+        /// 브라우저는 ESC로 포인터 잠금을 푸는 것을 <b>페이지가 막을 수 없게</b> 정해두었다
+        /// (커서를 가둬놓고 못 빠져나가게 하는 것을 막기 위해). 그래서 우리 코드가
+        /// 먼저 돌 방법은 없고, ESC 키 이벤트 자체가 안 오기도 한다.
+        ///
+        /// 그래서 키를 기다리는 대신 <b>결과를 신호로 쓴다</b> — 잠겨 있어야 할 상황에서
+        /// 잠금이 풀렸다면 사용자가 ESC를 눌렀다는 뜻이다.
+        ///
+        /// <b>바뀌는 순간만</b> 본다. 매 프레임 "안 잠김"으로 판단하면, 창을 닫고
+        /// 다시 잠기기까지의 한두 프레임 동안 창이 곧바로 다시 열린다.
+        /// (WebGL은 사용자가 클릭해야 잠금이 걸려서 그 틈이 길 수도 있다.)
+        ///
+        /// 탭 전환이나 알트탭으로 잠금이 풀릴 때도 열린다 — 그건 오히려 자연스럽다.
+        /// </summary>
+        private void DetectPointerLockLost(bool hasBody)
+        {
+            bool locked = Cursor.lockState == CursorLockMode.Locked;
+
+            bool shouldBeLocked = hasBody
+                && Game.GameManager.IsFirstPersonActive
+                && !PlayerRoleSetup.UiPanelOpen;
+
+            if (wasLocked && !locked && shouldBeLocked && !open)
+            {
+                SetOpen(true);
+            }
+
+            wasLocked = locked;
         }
 
         private void SetOpen(bool value)

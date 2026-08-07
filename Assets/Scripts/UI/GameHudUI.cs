@@ -26,6 +26,40 @@ namespace GhostHunter.UI
         private GUIStyle leftLabelStyle;
         private GUIStyle resultStyle;
         private GUIStyle wheelStyle;
+        private GUIStyle hintStyle;
+
+        // ── 우측 하단 조작 안내 ──
+        //
+        // 상황마다 쓸 수 있는 키가 다르므로 미리 나눠 둔다. 매 프레임 문자열을
+        // 조립하면 OnGUI가 프레임당 여러 번 불리는 만큼 쓰레기가 쌓인다.
+        private static readonly string[] LobbyHints =
+        {
+            "WASD 이동   Shift 달리기   Space 점프",
+            "F 게임 설정   Tab 이모트",
+            "` 또는 ESC   메뉴",
+        };
+
+        private static readonly string[] ExorcistHints =
+        {
+            "WASD 이동   Shift 달리기   Space 점프",
+            "F 줍기·문·헌납   좌클릭 사용   G 버리기",
+            "Tab 이모트",
+            "` 또는 ESC   메뉴",
+        };
+
+        private static readonly string[] GhostHints =
+        {
+            "WASD 이동   Shift 달리기   Space 점프",
+            "Q 영혼 분리 / 복귀",
+            "Ctrl 흡수(조사) / 처형(사냥)",
+            "` 또는 ESC   메뉴",
+        };
+
+        private static readonly string[] SpectatorHints =
+        {
+            "A / D   관전 대상 변경",
+            "` 또는 ESC   메뉴",
+        };
 
         // ── 탐지 결과 표시 ──
         private ExorcistInventory subscribed;
@@ -118,6 +152,7 @@ namespace GhostHunter.UI
                 DrawCrosshair();
                 DrawInteractPrompt(local);
                 DrawEmoteWheel(local);
+                DrawKeyHints(LobbyHints);
                 return;
             }
 
@@ -128,6 +163,7 @@ namespace GhostHunter.UI
             {
                 DrawMaterializeGauge();
                 DrawSpectatorPanel(spectator);
+                DrawKeyHints(SpectatorHints);
                 return;
             }
 
@@ -151,6 +187,8 @@ namespace GhostHunter.UI
                 DrawInventorySlot(local);
                 DrawDetectionResult();
             }
+
+            DrawKeyHints(local.IsGhost ? GhostHints : ExorcistHints);
         }
 
         /// <summary>
@@ -329,6 +367,41 @@ namespace GhostHunter.UI
             GUI.Label(rect, detectionText, resultStyle);
         }
 
+        /// <summary>
+        /// 우측 하단 조작 안내.
+        ///
+        /// <b>우측 하단인 이유</b>: 좌하단은 귀신 스킬바, 하단 중앙은 인벤토리 칸,
+        /// 좌상단은 단계·시간 표시가 이미 쓰고 있다. 남은 자리가 여기뿐이다.
+        ///
+        /// 폭은 글자에서 재서 잡는다. 숫자로 박아두면 폰트나 문구가 바뀔 때
+        /// 글자가 배경 밖으로 삐져나온다.
+        /// </summary>
+        private void DrawKeyHints(string[] lines)
+        {
+            const float LineHeight = 17f;
+            const float PadX = 10f;
+            const float PadY = 6f;
+            const float Margin = 12f;
+
+            float width = 0f;
+            foreach (var line in lines)
+            {
+                width = Mathf.Max(width, hintStyle.CalcSize(new GUIContent(line)).x);
+            }
+
+            float boxW = width + PadX * 2f;
+            float boxH = lines.Length * LineHeight + PadY * 2f;
+            var box = new Rect(Screen.width - boxW - Margin, Screen.height - boxH - Margin, boxW, boxH);
+
+            GUI.DrawTexture(box, barBack);
+
+            for (int i = 0; i < lines.Length; i++)
+            {
+                GUI.Label(new Rect(box.x + PadX, box.y + PadY + i * LineHeight, width, LineHeight),
+                    lines[i], hintStyle);
+            }
+        }
+
         private void EnsureStyles()
         {
             promptStyle ??= new GUIStyle(GUI.skin.label)
@@ -351,6 +424,14 @@ namespace GhostHunter.UI
                 fontSize = 13,
                 alignment = TextAnchor.MiddleLeft,
                 normal = { textColor = Color.white },
+            };
+
+            // 조작 안내는 배경이므로 흐리게. 1인칭 화면을 가리면 안 된다.
+            hintStyle ??= new GUIStyle(GUI.skin.label)
+            {
+                fontSize = 11,
+                alignment = TextAnchor.MiddleLeft,
+                normal = { textColor = new Color(1f, 1f, 1f, 0.72f) },
             };
 
             if (barFill == null)

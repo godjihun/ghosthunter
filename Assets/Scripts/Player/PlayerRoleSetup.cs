@@ -45,9 +45,6 @@ namespace GhostHunter.Player
         /// <summary>마지막으로 적용한 시점 모드. 매 프레임 카메라를 만지지 않기 위한 캐시.</summary>
         private bool viewModeApplied;
 
-        /// <summary>마지막으로 적용한 커서 상태. 시점 모드와 별개로 움직인다.</summary>
-        private bool cursorLocked;
-
         /// <summary>
         /// 마우스를 써야 하는 창이 떠 있는가 (게임 설정 단말 등).
         ///
@@ -154,14 +151,27 @@ namespace GhostHunter.Player
             ApplyCursor(active && !UiPanelOpen);
         }
 
+        /// <summary>
+        /// 커서 잠금을 원하는 상태로 맞춘다.
+        ///
+        /// <b>캐시한 값이 아니라 실제 상태를 본다.</b> 브라우저는 ESC를 받으면
+        /// 우리 코드를 거치지 않고 포인터 잠금을 풀어버린다. 캐시만 믿으면
+        /// "잠근 줄 알았는데 실제로는 풀린" 상태가 되고, 창을 닫아도
+        /// <c>locked == cursorLocked</c>에서 조기 반환해 <b>영영 다시 잠기지 않는다</b> —
+        /// 커서가 게임 화면 위에 계속 떠 있게 된다.
+        ///
+        /// 실제 상태와 비교하면 매 프레임 다시 시도하게 되는데, 이게 WebGL에서는
+        /// 오히려 맞다. 브라우저는 사용자가 클릭하는 순간에만 잠금을 허용하므로
+        /// 계속 요청해 두면 다음 클릭에서 걸린다.
+        /// </summary>
         private void ApplyCursor(bool locked)
         {
-            if (locked == cursorLocked)
+            bool actuallyLocked = Cursor.lockState == CursorLockMode.Locked;
+            if (locked == actuallyLocked)
             {
                 return;
             }
 
-            cursorLocked = locked;
             Cursor.lockState = locked ? CursorLockMode.Locked : CursorLockMode.None;
             Cursor.visible = !locked;
         }

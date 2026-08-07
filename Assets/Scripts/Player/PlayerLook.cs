@@ -23,7 +23,7 @@ namespace GhostHunter.Player
         private static float sensitivityScale = -1f;
 
         /// <summary>
-        /// 사용자가 정한 감도 배수. ESC 설정 창이 조절한다.
+        /// 사용자가 정한 감도 배수. 메뉴 설정 창이 조절한다.
         ///
         /// <b>네트워크로 보내지 않는다.</b> 내 화면이 도는 속도일 뿐이라 남이 알 이유가 없다.
         /// <c>PlayerPrefs</c>에 남겨 다음에 접속해도 유지된다 — 매번 다시 맞추게 하면

@@ -24,7 +24,7 @@ namespace GhostHunter.UI
         [SerializeField] private Button settingsButton;
         [SerializeField] private Button quitButton;
 
-        /// <summary>설정 창이 떠 있는가. 대기방 ESC 메뉴와 같은 내용을 그린다.</summary>
+        /// <summary>설정 창이 떠 있는가. 대기방 메뉴와 같은 내용을 그린다.</summary>
         private bool settingsOpen;
 
         private void Awake()
@@ -104,7 +104,7 @@ namespace GhostHunter.UI
             GUI.Box(rect, GUIContent.none);
             GUILayout.BeginArea(new Rect(rect.x + 18, rect.y + 16, rect.width - 36, rect.height - 32));
 
-            // 내용은 대기방 ESC 메뉴와 같은 코드가 그린다.
+            // 내용은 대기방 메뉴와 같은 코드가 그린다.
             SettingsPanel.Draw();
 
             GUILayout.FlexibleSpace();

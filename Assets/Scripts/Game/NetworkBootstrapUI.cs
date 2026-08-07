@@ -420,6 +420,9 @@ namespace GhostHunter.Game
                 ? "게임 설정(F)에서 설정과 시작을 조작합니다."
                 : "방장이 시작하기를 기다리는 중…");
 
+            // 백틱은 눈에 띄는 키가 아니다. 안내가 없으면 메뉴가 있는 줄도 모른다.
+            GUILayout.Label("` 키: 메뉴 (설정 / 나가기)");
+
             GUILayout.EndArea();
         }
 
