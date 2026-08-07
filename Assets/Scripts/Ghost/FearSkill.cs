@@ -38,7 +38,23 @@ namespace GhostHunter.Ghost
             NetworkVariableReadPermission.Owner,
             NetworkVariableWritePermission.Server);
 
-        public float CooldownRemaining => cooldown.Value;
+        /// <summary>
+        /// 시전 직후 소유자 화면에서만 쓰는 <b>아주 짧은</b> 임시 쿨타임.
+        ///
+        /// 서버가 쿨타임을 내려주기까지 Relay를 두 번 건너간다. 그동안 버튼이 밝은 채로
+        /// 남아 있으면 연타하게 되고, 눌러도 아무 일이 없어 먹통처럼 느껴진다.
+        /// 그래서 누르는 즉시 로컬에서 잠깐 막는다.
+        ///
+        /// <b>왕복을 덮을 만큼만 짧게 잡는다</b>(<see cref="PredictionWindow"/>).
+        /// 진짜 쿨타임 길이로 잡으면, 서버가 단계 전환으로 쿨타임을 0으로 만들어도
+        /// 클라이언트에는 옛 값이 남아 <b>사냥에 들어갔는데 킬이 막히는</b> 상태가 된다 —
+        /// 초기화는 서버에서만 도는 함수라 클라이언트까지 닿지 않기 때문이다.
+        /// </summary>
+        private const float PredictionWindow = 0.6f;
+
+        private float localCooldown;
+
+        public float CooldownRemaining => Mathf.Max(cooldown.Value, localCooldown);
 
         /// <summary>사거리 안에 대상이 있는가. UI 버튼 활성화에 쓴다 (기술 문서 5-4).</summary>
         public bool HasTargetInRange { get; private set; }
@@ -74,6 +90,10 @@ namespace GhostHunter.Ghost
                 return;
             }
 
+            // 누르는 즉시 잠깐 막아 버튼이 바로 반응하게 한다. 서버 값이 도착하면
+            // 그쪽이 이어받는다. 대상의 흡수·사망은 여전히 서버가 정한다.
+            localCooldown = PredictionWindow;
+
             UseFearSkillRpc();
         }
 
@@ -84,6 +104,12 @@ namespace GhostHunter.Ghost
             if (IsServer && cooldown.Value > 0f)
             {
                 cooldown.Value = Mathf.Max(0f, cooldown.Value - Time.deltaTime);
+            }
+
+            // 로컬 예측분은 소유자 화면에서만 따로 깎는다.
+            if (localCooldown > 0f)
+            {
+                localCooldown = Mathf.Max(0f, localCooldown - Time.deltaTime);
             }
 
             if (IsOwner)
@@ -111,6 +137,10 @@ namespace GhostHunter.Ghost
             {
                 cooldown.Value = 0f;
             }
+
+            // 로컬 예측분도 같이 지운다. 안 그러면 사냥으로 넘어가도
+            // 흡수 쿨타임 30초가 소유자 화면에만 남아 킬을 못 쓰는 것처럼 보인다.
+            localCooldown = 0f;
         }
 
         [Rpc(SendTo.Server)]

@@ -68,7 +68,7 @@ namespace GhostHunter.Tools
                 }
             }
 
-            var points = new List<ToolSpawnPoint>(spawnPoints);
+            var points = UsablePoints();
             Shuffle(points);
             Shuffle(toPlace);
 
@@ -93,6 +93,48 @@ namespace GhostHunter.Tools
 
                 spawned.Add(netObj);
             }
+        }
+
+        /// <summary>
+        /// 실제로 쓸 수 있는 스폰 지점만 남긴다.
+        ///
+        /// <b>제단 안에 겹친 지점은 뺀다.</b> 거기 도구가 뜨면 제단 모델에 파묻혀
+        /// 보이지도 집히지도 않는데, 종류당 개수는 이미 균등하게 뽑아둔 뒤라
+        /// <b>그 한 종류만 조용히 한 개 사라진다</b> — 개수 불균등은 곧 약점 오추론이 된다.
+        ///
+        /// 지점을 지우는 대신 스폰 때 걸러내는 이유는, 제단을 옮기면 겹치는 지점도
+        /// 같이 바뀌기 때문이다. 씬에서 손으로 맞춰 두면 다음에 옮길 때 또 틀어진다.
+        /// </summary>
+        private List<ToolSpawnPoint> UsablePoints()
+        {
+            var points = new List<ToolSpawnPoint>();
+            var altar = Game.Altar.Instance != null
+                ? Game.Altar.Instance.GetComponent<Collider>()
+                : null;
+
+            foreach (var point in spawnPoints)
+            {
+                if (point == null)
+                {
+                    continue;
+                }
+
+                // ClosestPoint는 콜라이더 안의 점을 받으면 그 점을 그대로 돌려준다.
+                // 즉 "제자리로 돌아오면 내부"다.
+                if (altar != null)
+                {
+                    Vector3 p = point.transform.position;
+                    if ((altar.ClosestPoint(p) - p).sqrMagnitude < 0.0001f)
+                    {
+                        Debug.Log($"[ToolSpawner] {point.name}이(가) 제단과 겹쳐 제외했습니다.");
+                        continue;
+                    }
+                }
+
+                points.Add(point);
+            }
+
+            return points;
         }
 
         /// <summary>퇴마사가 도구를 버릴 때 서버가 호출.</summary>

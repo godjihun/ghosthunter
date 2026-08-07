@@ -86,12 +86,47 @@ namespace GhostHunter.Player
                 All.Add(this);
             }
 
-            // 닉네임은 클라이언트가 알고 서버가 소유하므로, 소유자가 한 번 올려준다.
-            if (IsOwner && !string.IsNullOrWhiteSpace(LocalNickname))
+        }
+
+        /// <summary>닉네임을 서버에 올렸는가. 아래 Update 주석 참고.</summary>
+        private bool nicknameSubmitted;
+
+        /// <summary>
+        /// 닉네임을 서버에 올린다. 클라이언트가 알고 서버가 소유하므로 소유자가 한 번 보낸다.
+        ///
+        /// <b>OnNetworkSpawn에서 보내면 안 된다.</b> 그 시점은 스폰 절차가 끝나기 전이라
+        /// RPC가 그대로 묻힌다 — 닉네임이 영영 비어 "플레이어 0"으로만 보이던 원인이었다.
+        /// 대기방 배치가 같은 이유로 실패했던 것과 똑같은 함정이다.
+        ///
+        /// 첫 조건에서 바로 빠져나오므로 이후 프레임에는 사실상 비용이 없다.
+        /// </summary>
+        private void Update()
+        {
+            if (nicknameSubmitted || !IsSpawned || !IsOwner)
+            {
+                return;
+            }
+
+            nicknameSubmitted = true;
+
+            if (!string.IsNullOrWhiteSpace(LocalNickname))
             {
                 SubmitNicknameRpc(LocalNickname);
             }
         }
+
+        /// <summary>
+        /// 서버가 이 사람을 대기방에 세워줬는가.
+        ///
+        /// <b>스폰하는 순간에는 자리를 잡아줄 수 없다.</b> 그 시점에 보낸
+        /// <see cref="TeleportRpc"/>는 스폰 절차가 끝나기 전이라 묻혀버린다 —
+        /// 호스트가 엉뚱한 곳에서 시작하던 원인이 이것이었다.
+        /// 그래서 GameManager가 다음 프레임부터 이 값을 보고 뒤늦게 세운다.
+        ///
+        /// 이 오브젝트에 얹어두면 플레이어가 나갈 때 같이 사라져, 나갔다 들어온
+        /// 사람이 "이미 세웠다"로 잘못 걸리는 일이 없다.
+        /// </summary>
+        public bool ServerLobbyPlaced { get; set; }
 
         /// <summary>
         /// 닉네임 등록. <b>서버가 값을 쓴다</b> — 클라이언트가 직접 쓰면

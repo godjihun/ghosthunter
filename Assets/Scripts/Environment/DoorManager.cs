@@ -72,12 +72,35 @@ namespace GhostHunter.Environment
             }
         }
 
-        /// <summary>클라이언트가 문을 건드렸을 때 호출. 실제 판단은 서버가 한다.</summary>
+        /// <summary>
+        /// 클라이언트가 문을 건드렸을 때 호출. 실제 판단은 서버가 한다.
+        ///
+        /// <b>내 화면에서는 즉시 돌린다.</b> 서버 왕복(Relay 2회)을 기다린 뒤 움직이면
+        /// F를 눌러도 반응이 없는 것처럼 느껴진다.
+        ///
+        /// 문은 <b>누구나 열 수 있어 서버가 거절할 일이 없다</b> — 그래서 미리 돌려도
+        /// 어긋날 위험이 사실상 없다. 설령 어긋나도 서버 값이 도착하는 순간
+        /// <see cref="ApplyAll"/>이 덮어쓰므로 저절로 맞춰진다.
+        /// </summary>
         public void RequestToggle(int doorIndex)
         {
             if (doorIndex < 0 || doorIndex >= MaxDoors)
             {
                 return;
+            }
+
+            // 서버(호스트)는 아래 RPC가 곧바로 실행되므로 미리 돌릴 필요가 없다.
+            // 두 번 뒤집으면 도로 닫힌다.
+            if (!IsServer)
+            {
+                foreach (var door in doors)
+                {
+                    if (door != null && door.DoorIndex == doorIndex)
+                    {
+                        door.SetOpen(!door.IsOpen);
+                        break;
+                    }
+                }
             }
 
             ToggleRpc(doorIndex);

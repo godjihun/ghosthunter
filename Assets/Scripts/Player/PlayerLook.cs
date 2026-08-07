@@ -19,6 +19,34 @@ namespace GhostHunter.Player
         [SerializeField] private float minPitch = -85f;
         [SerializeField] private float maxPitch = 85f;
 
+        private const string SensitivityKey = "GhostHunter.Sensitivity";
+        private static float sensitivityScale = -1f;
+
+        /// <summary>
+        /// 사용자가 정한 감도 배수. 메뉴 설정 창이 조절한다.
+        ///
+        /// <b>네트워크로 보내지 않는다.</b> 내 화면이 도는 속도일 뿐이라 남이 알 이유가 없다.
+        /// <c>PlayerPrefs</c>에 남겨 다음에 접속해도 유지된다 — 매번 다시 맞추게 하면
+        /// 설정을 만든 의미가 없다.
+        /// </summary>
+        public static float SensitivityScale
+        {
+            get
+            {
+                // 매 프레임 PlayerPrefs를 읽지 않도록 처음 한 번만 불러온다.
+                if (sensitivityScale < 0f)
+                {
+                    sensitivityScale = PlayerPrefs.GetFloat(SensitivityKey, 1f);
+                }
+                return sensitivityScale;
+            }
+            set
+            {
+                sensitivityScale = Mathf.Clamp(value, 0.2f, 3f);
+                PlayerPrefs.SetFloat(SensitivityKey, sensitivityScale);
+            }
+        }
+
         private Vector2 lookInput;
         private float pitch;
         private PlayerEmote emote;
@@ -45,10 +73,18 @@ namespace GhostHunter.Player
 
         private void Update()
         {
-            // 로비·결과 화면에서는 시점을 돌리지 않는다. 커서로 UI를 눌러야 하기 때문에
+            // 결과 화면에서는 시점을 돌리지 않는다. 커서로 UI를 눌러야 하기 때문에
             // 커서 잠금은 PlayerRoleSetup이 단독으로 관리한다 (여기서 만지지 말 것).
-            if (!IsOwner || !GameManager.IsGameplayActive)
+            if (!IsOwner || !GameManager.IsFirstPersonActive)
             {
+                return;
+            }
+
+            // 창이 떠 있으면 마우스는 UI의 것이다. 시점까지 돌면 창을 누르려다
+            // 화면이 홱 돌아간다.
+            if (PlayerRoleSetup.UiPanelOpen)
+            {
+                lookInput = Vector2.zero;
                 return;
             }
 
@@ -70,8 +106,9 @@ namespace GhostHunter.Player
             }
 
             // 마우스 델타는 이미 프레임당 이동량이므로 Time.deltaTime을 곱하지 않는다.
-            float yaw = lookInput.x * mouseSensitivity;
-            pitch = Mathf.Clamp(pitch - lookInput.y * mouseSensitivity, minPitch, maxPitch);
+            float speed = mouseSensitivity * SensitivityScale;
+            float yaw = lookInput.x * speed;
+            pitch = Mathf.Clamp(pitch - lookInput.y * speed, minPitch, maxPitch);
 
             transform.Rotate(Vector3.up, yaw, Space.World);
 

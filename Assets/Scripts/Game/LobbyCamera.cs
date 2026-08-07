@@ -23,7 +23,14 @@ namespace GhostHunter.Game
         private void LateUpdate()
         {
             // 플레이어 카메라가 켜지는 것보다 늦게 판단해야 한 프레임 깜빡임이 없다.
-            bool lobbyView = !GameManager.IsGameplayActive;
+            //
+            // <b>기준은 단계가 아니라 "내 몸이 있는가"다.</b> 대기방도 1인칭으로 걸어다니는
+            // 공간이 됐으므로, 접속해서 캐릭터가 생기는 순간 이 카메라는 물러나야 한다.
+            // 단계로 판단하면 대기방에 서 있는데 화면은 씬 카메라인 상태가 된다.
+            //
+            // 결과 화면은 예외다. 커서로 버튼을 눌러야 하므로 이 카메라가 다시 나선다.
+            bool hasBody = Player.NetworkPlayer.GetLocal() != null;
+            bool lobbyView = !hasBody || !GameManager.IsFirstPersonActive;
 
             if (cam.enabled != lobbyView)
             {

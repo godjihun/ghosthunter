@@ -67,6 +67,11 @@ namespace GhostHunter.Exorcist
                 return;
             }
 
+            // 쓰는 동작은 즉시 보여준다. 결과(탐지 성공 여부)는 여전히 서버가 정한다 —
+            // 그건 이 게임의 비밀이라 절대 미리 판단하면 안 된다 (시나리오 3-2).
+            // 여기서 앞당기는 건 "썼다"는 동작뿐이다.
+            GetComponent<PlayerAnimation>()?.PlayPickup();
+
             UseToolRpc(transform.position);
         }
 
@@ -87,6 +92,14 @@ namespace GhostHunter.Exorcist
             {
                 return;
             }
+
+            // <b>모션은 서버를 기다리지 않고 즉시 재생한다.</b>
+            // Relay를 거치는 왕복(요청 → 판정 → 응답)이 끝나야 손을 뻗으면,
+            // 웹에서는 그 지연이 그대로 "F를 눌렀는데 반응이 없다"로 느껴진다.
+            //
+            // 모션은 연출일 뿐이라 서버가 거절해도 손해가 없다. 실제 획득 여부는
+            // 여전히 서버가 정하며(PickupRpc), 인벤토리 표시는 그 결과를 따른다.
+            GetComponent<PlayerAnimation>()?.PlayPickup();
 
             PickupRpc(new NetworkObjectReference(toolObject));
         }
@@ -188,6 +201,13 @@ namespace GhostHunter.Exorcist
         [Rpc(SendTo.Everyone)]
         private void PickupAnimationRpc()
         {
+            // 소유자는 이미 로컬에서 재생했다 (RequestPickup 참고).
+            // 여기서 또 틀면 손을 두 번 뻗는다.
+            if (IsOwner)
+            {
+                return;
+            }
+
             GetComponent<PlayerAnimation>()?.PlayPickup();
         }
 

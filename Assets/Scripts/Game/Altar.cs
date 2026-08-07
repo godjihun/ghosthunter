@@ -19,6 +19,9 @@ namespace GhostHunter.Game
 
         [SerializeField] private float offerRange = 3f;
 
+        [Tooltip("헌납 프롬프트를 띄울 위치. 비우면 제단의 원점(= 바닥)에 뜬다.")]
+        [SerializeField] private Transform promptAnchor;
+
         /// <summary>제단에 헌납된 도구들. 서로 다른 3종이 모이면 판정한다.</summary>
         public readonly NetworkList<int> OfferedTools = new(
             new List<int>(),
@@ -67,7 +70,12 @@ namespace GhostHunter.Game
 
         // ── IInteractable ──────────────────────────────────────────
 
-        public Transform PromptAnchor => transform;
+        /// <summary>
+        /// 제단은 원점이 <b>바닥</b>이라 그대로 쓰면 프롬프트가 발밑에 뜬다.
+        /// 게다가 사거리(2.5m)를 눈높이에서 재므로, 바닥을 기준으로 잡으면
+        /// 수직 1.6m가 사거리를 통째로 갉아먹어 <b>제단에 붙어야 프롬프트가 뜬다.</b>
+        /// </summary>
+        public Transform PromptAnchor => promptAnchor != null ? promptAnchor : transform;
 
         public bool CanInteract(NetworkPlayer viewer)
         {

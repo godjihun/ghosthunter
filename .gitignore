@@ -105,3 +105,14 @@ InitTestScene*.unity*
 
 # Auto-generated scenes by play mode tests
 /[Aa]ssets/[Ii]nit[Tt]est[Ss]cene*.unity*
+
+# ── 이 프로젝트에서 추가 ──────────────────────────────────
+# 에디터가 비정상 종료하면 남기는 씬 복구본. 작업물이 아니다.
+/[Aa]ssets/_Recovery/
+/[Aa]ssets/_Recovery.meta
+
+# Web 빌드 중 Burst가 뱉는 중간 산출물 (lib_burst_generated.cpp/.wasm)
+/Data/
+
+# 배포용 zip (Tools/pack_web_build.py 결과)
+*-web.zip

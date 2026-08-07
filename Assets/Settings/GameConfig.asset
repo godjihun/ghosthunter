@@ -16,18 +16,21 @@ MonoBehaviour:
   InvestigationDuration: 120
   FearSkillCooldown: 30
   ToolNullifyDuration: 15
-  DetectionRadius: 3
+  DetectionRadius: 5
+  AbsorbGaugePerHit: 20
   HuntDuration: 60
   ExorcistMoveSpeed: 4
   SoulMoveSpeed: 4
   GhostHuntMoveSpeed: 8
+  SprintMultiplier: 1.6
+  GhostSprintMultiplier: 2
   FearSkillRange: 1.5
+  HuntKillCooldown: 3
   WeaknessCount: 3
   AltarCapacity: 3
   TotalToolCount: 30
   MaxPlayers: 5
   DetectionFeedbackDuration: 1.5
-  PickupHoldDuration: 0.6
   SpectatorCameraDistance: 2.5
   SpectatorCameraHeight: 1.5
   SpectatorCameraMinDistance: 0.5
