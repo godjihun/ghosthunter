@@ -32,11 +32,21 @@ namespace GhostHunter.Game
             Instance != null ? Instance.Phase.Value : GamePhase.Lobby;
 
         /// <summary>
-        /// 지금이 "1인칭으로 조작하는 중"인가.
+        /// 지금이 "1인칭으로 몸을 조작하는 중"인가.
         ///
-        /// 로비와 결과 화면은 마우스로 UI를 눌러야 하므로 1인칭이 아니다.
-        /// 이 값 하나로 카메라·커서·이동·시점을 한꺼번에 전환한다 —
-        /// 각자 판단하게 두면 "커서는 잠겼는데 UI는 떠 있는" 상태가 생긴다.
+        /// <b>대기방도 걸어다니는 공간이다.</b> 그래서 로비는 여기 포함된다 —
+        /// 이동·시점·카메라·커서·이모트·상호작용이 전부 이 값을 따른다.
+        /// 각자 판단하게 두면 "커서는 잠겼는데 UI는 떠 있는" 상태가 생기므로 한 곳에 모은다.
+        ///
+        /// 결과 화면만 예외다. 거기서는 마우스로 버튼을 눌러야 한다.
+        /// </summary>
+        public static bool IsFirstPersonActive => CurrentPhase != GamePhase.Result;
+
+        /// <summary>
+        /// 지금이 "판이 진행 중"인가.
+        ///
+        /// <see cref="IsFirstPersonActive"/>와 갈라야 한다. 대기방에서는 몸은 움직이지만
+        /// 게이지·타이머·손전등·관전은 아직 의미가 없다 — 그런 것들이 이 값을 본다.
         /// </summary>
         public static bool IsGameplayActive
         {
@@ -70,6 +80,9 @@ namespace GhostHunter.Game
 
         [Tooltip("퇴마사들이 대기하는 지점들.")]
         [SerializeField] private Transform[] exorcistSpawnPoints;
+
+        [Tooltip("대기방에서 서 있는 지점. 접속하면 여기로, 판이 끝나도 여기로 돌아온다.")]
+        [SerializeField] private Transform lobbySpawnPoint;
 
         [Tooltip("이 높이보다 아래로 떨어지면 맵 밖으로 본 것이다. 저택 최저점(-22m)보다 낮게 잡을 것.")]
         [SerializeField] private float fallResetHeight = -30f;
@@ -113,6 +126,15 @@ namespace GhostHunter.Game
             NetworkVariableReadPermission.Everyone,
             NetworkVariableWritePermission.Server);
 
+        /// <summary>
+        /// 방장이 대기방에서 정한 밸런스. 전원이 같은 값을 봐야 한다 —
+        /// 탐지 반경 표시처럼 클라이언트도 읽는 값이 섞여 있다.
+        /// </summary>
+        public readonly NetworkVariable<LobbySettings> Settings = new(
+            default,
+            NetworkVariableReadPermission.Everyone,
+            NetworkVariableWritePermission.Server);
+
         /// <summary>서버만 아는 진짜 약점. 절대 공개 NetworkVariable에 넣지 말 것.</summary>
         private WeaknessSet serverWeakness;
 
@@ -126,6 +148,65 @@ namespace GhostHunter.Game
                 return;
             }
             Instance = this;
+
+            // <b>에셋을 복제해서 쓴다.</b> ScriptableObject는 파일이라, 방장이 값을 바꾸면
+            // 에디터에서는 그게 그대로 디스크에 남는다 — 플레이 모드를 껐다 켜도 안 돌아오고
+            // git에도 올라간다. 사본에만 쓰면 원본은 손대지 않는다.
+            if (config != null)
+            {
+                config = Instantiate(config);
+            }
+        }
+
+        public override void OnNetworkSpawn()
+        {
+            if (IsServer && config != null)
+            {
+                // 처음 값은 에셋에 적힌 그대로. 방장이 만지기 전까지 이게 기본값이다.
+                Settings.Value = LobbySettings.From(config);
+            }
+
+            Settings.OnValueChanged += OnSettingsChanged;
+            ApplySettings(Settings.Value);
+        }
+
+        public override void OnNetworkDespawn()
+        {
+            Settings.OnValueChanged -= OnSettingsChanged;
+        }
+
+        private void OnSettingsChanged(LobbySettings previous, LobbySettings current)
+        {
+            ApplySettings(current);
+        }
+
+        /// <summary>
+        /// 동기화된 값을 런타임 사본에 옮긴다.
+        ///
+        /// 이렇게 해두면 <c>GameManager.Config</c>를 읽는 기존 코드는 하나도 안 고쳐도 된다 —
+        /// 읽는 곳이 스무 군데가 넘는데 거기까지 손대면 빠뜨리는 곳이 반드시 생긴다.
+        /// </summary>
+        private void ApplySettings(LobbySettings settings)
+        {
+            // 스폰 직후 서버가 값을 채우기 전에는 전부 0이다. 그대로 적용하면
+            // 조사 시간 0초짜리 판이 된다.
+            if (config == null || settings.InvestigationDuration <= 0f)
+            {
+                return;
+            }
+
+            settings.ApplyTo(config);
+        }
+
+        /// <summary>방장이 대기방에서 밸런스를 바꾼다. 서버 전용.</summary>
+        public void ServerSetSettings(LobbySettings settings)
+        {
+            if (!IsServer || Phase.Value != GamePhase.Lobby)
+            {
+                return;
+            }
+
+            Settings.Value = settings;
         }
 
         public override void OnDestroy()
@@ -239,6 +320,87 @@ namespace GhostHunter.Game
                 if (target != null)
                 {
                     TeleportPlayer(p, target.position, target.rotation);
+                }
+            }
+        }
+
+        /// <summary>
+        /// 대기방으로 보낸다. 서버 전용.
+        ///
+        /// 접속 직후와 판이 끝난 뒤 모두 여기를 거친다. <b>한 점에 겹쳐 세우지 않는다</b> —
+        /// 다섯 명이 같은 좌표에 생기면 <c>CharacterController</c>끼리 밀어내며 튀어나간다.
+        /// 접속 순번에 따라 원형으로 벌려 세운다.
+        /// </summary>
+        public void ServerSendToLobby(NetworkPlayer player)
+        {
+            if (!IsServer || player == null)
+            {
+                return;
+            }
+
+            if (lobbySpawnPoint == null)
+            {
+                // 조용히 넘어가면 "왜 엉뚱한 데서 시작하지"로만 보인다. 원인을 남긴다.
+                Debug.LogError("[GameManager] lobbySpawnPoint가 비어 있습니다. " +
+                               "인스펙터에서 LobbySpawnPoint를 연결하세요.");
+                return;
+            }
+
+            // 원 위에 순서대로 놓는다. 인원이 늘어도 규칙이 그대로라 자리가 안 겹친다.
+            int index = 0;
+            foreach (var p in NetworkPlayer.All)
+            {
+                if (p == player) break;
+                if (p != null) index++;
+            }
+
+            const float Radius = 1.6f;
+            float angle = index * Mathf.PI * 2f / Mathf.Max(1, GameConfigMaxPlayers);
+            Vector3 offset = new(Mathf.Cos(angle) * Radius, 0f, Mathf.Sin(angle) * Radius);
+
+            // 원 바깥을 보고 서면 서로 등지게 된다. 안쪽(스폰 지점)을 보게 돌린다.
+            Quaternion look = offset.sqrMagnitude > 0.001f
+                ? Quaternion.LookRotation(-offset)
+                : lobbySpawnPoint.rotation;
+
+            Vector3 target = lobbySpawnPoint.position + offset;
+            TeleportPlayer(player, target, look);
+            Debug.Log($"[GameManager] 플레이어 {player.OwnerClientId}를 대기방 {target:F2}에 세웠다.");
+        }
+
+        /// <summary>대기방 배치에 쓰는 인원 기준. 설정이 없으면 5명으로 본다.</summary>
+        private int GameConfigMaxPlayers => config != null ? Mathf.Max(1, config.MaxPlayers) : 5;
+
+        /// <summary>
+        /// 아직 대기방에 못 세운 사람을 세운다. 서버가 매 프레임 확인한다.
+        ///
+        /// <b>스폰 순간에 세우면 안 된다.</b> <c>OnNetworkSpawn</c> 안에서 보낸
+        /// 텔레포트 RPC는 스폰 절차가 끝나기 전이라 그대로 묻힌다 — 호스트가
+        /// 엉뚱한 자리에서 시작하던 원인이 이것이었다. 한 프레임 뒤에 세우면
+        /// 오브젝트가 완전히 자리를 잡은 뒤라 확실히 먹는다.
+        /// </summary>
+        private void PlaceNewcomersInLobby()
+        {
+            foreach (var p in NetworkPlayer.All)
+            {
+                if (p == null || !p.IsSpawned || p.ServerLobbyPlaced)
+                {
+                    continue;
+                }
+
+                p.ServerLobbyPlaced = true;
+                ServerSendToLobby(p);
+            }
+        }
+
+        /// <summary>전원을 다시 세우도록 표시한다. 다음 프레임에 옮겨진다.</summary>
+        private void MarkEveryoneForLobby()
+        {
+            foreach (var p in NetworkPlayer.All)
+            {
+                if (p != null)
+                {
+                    p.ServerLobbyPlaced = false;
                 }
             }
         }
@@ -368,6 +530,15 @@ namespace GhostHunter.Game
                     continue;
                 }
 
+                // <b>어디로 되돌릴지는 단계가 정한다.</b> 대기방에서 떨어진 사람을
+                // 저택으로 보내면 시작도 안 한 게임의 한복판에 떨어뜨리는 셈이다.
+                if (Phase.Value == GamePhase.Lobby)
+                {
+                    ServerSendToLobby(p);
+                    Debug.Log($"[GameManager] 대기방 밖으로 떨어진 플레이어 {p.OwnerClientId}를 복귀시켰다.");
+                    continue;
+                }
+
                 Transform target = p.IsGhost
                     ? ghostSpawnPoint
                     : exorcistSpawnPoints is { Length: > 0 } ? exorcistSpawnPoints[0] : null;
@@ -394,6 +565,11 @@ namespace GhostHunter.Game
             var phase = Phase.Value;
             if (phase is GamePhase.Lobby or GamePhase.Result)
             {
+                // 접속하자마자는 자리를 잡아줄 수 없어 여기서 뒤늦게 세운다.
+                if (phase == GamePhase.Lobby)
+                {
+                    PlaceNewcomersInLobby();
+                }
                 return;
             }
 
@@ -476,6 +652,9 @@ namespace GhostHunter.Game
 
             Phase.Value = GamePhase.Lobby;
             PhaseTimeRemaining.Value = 0f;
+
+            // 단계만 되돌리면 저택 한복판에 그대로 서 있게 된다. 몸도 같이 옮긴다.
+            MarkEveryoneForLobby();
         }
 
         /// <summary>

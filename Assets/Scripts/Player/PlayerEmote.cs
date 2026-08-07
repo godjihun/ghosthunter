@@ -99,7 +99,9 @@ namespace GhostHunter.Player
                 return GameManager.CurrentPhase == GamePhase.Hunt;
             }
 
-            return GameManager.IsGameplayActive;
+            // 대기방에서도 쓸 수 있다. 진영이 아직 없어 전원이 퇴마사 모습이고,
+            // 서로 보이는 상태라 춤이 실제로 남에게 보인다.
+            return GameManager.IsFirstPersonActive;
         }
 
         private void Update()

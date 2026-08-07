@@ -98,7 +98,7 @@ namespace GhostHunter.UI
             // 그리기 전에 스킨 폰트를 갈아둔다 (HudFont 주석 참고).
             HudFont.ApplyToSkin();
 
-            if (!GameManager.IsGameplayActive)
+            if (!GameManager.IsFirstPersonActive)
             {
                 return;
             }
@@ -110,6 +110,16 @@ namespace GhostHunter.UI
             }
 
             EnsureStyles();
+
+            // 대기방에서는 조준점과 프롬프트, 이모트 휠만 있으면 된다.
+            // 게이지·인벤토리·제단은 아직 존재하지 않는 것들이라 띄우면 거짓말이 된다.
+            if (!GameManager.IsGameplayActive)
+            {
+                DrawCrosshair();
+                DrawInteractPrompt(local);
+                DrawEmoteWheel(local);
+                return;
+            }
 
             // 관전 중에는 조준점·프롬프트·인벤토리가 전부 의미가 없다.
             // 남의 시점을 보는데 내 조작 UI가 떠 있으면 조작되는 줄 안다.

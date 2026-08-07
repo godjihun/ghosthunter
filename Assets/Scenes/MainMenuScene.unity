@@ -756,6 +756,7 @@ GameObject:
   - component: {fileID: 534225486}
   - component: {fileID: 534225488}
   - component: {fileID: 534225487}
+  - component: {fileID: 534225489}
   m_Layer: 5
   m_Name: MainMenuPanel
   m_TagString: Untagged
@@ -822,6 +823,22 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 534225485}
   m_CullTransparentMesh: 1
+--- !u!114 &534225489
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 534225485}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d62aca8b28c130a44b9dec7010e31bd9, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::GhostHunter.UI.MainMenuUI
+  gameplayScene: GameScene
+  startButton: {fileID: 204332205}
+  settingsButton: {fileID: 868145069}
+  quitButton: {fileID: 465156426}
 --- !u!1 &775274868
 GameObject:
   m_ObjectHideFlags: 0

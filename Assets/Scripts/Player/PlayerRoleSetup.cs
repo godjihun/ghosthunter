@@ -45,6 +45,21 @@ namespace GhostHunter.Player
         /// <summary>마지막으로 적용한 시점 모드. 매 프레임 카메라를 만지지 않기 위한 캐시.</summary>
         private bool viewModeApplied;
 
+        /// <summary>마지막으로 적용한 커서 상태. 시점 모드와 별개로 움직인다.</summary>
+        private bool cursorLocked;
+
+        /// <summary>
+        /// 마우스를 써야 하는 창이 떠 있는가 (게임 설정 단말 등).
+        ///
+        /// <b>커서는 이 컴포넌트만 만진다</b>는 규칙을 지키면서 창을 띄우려면
+        /// 창 쪽에서 이 값을 올리고 여기서 반영하는 수밖에 없다. 창이 직접
+        /// <c>Cursor.lockState</c>를 건드리면 서로 매 프레임 덮어써서 깜빡인다.
+        ///
+        /// 시점 모드(카메라·오디오)와는 분리한다 — 창을 열었다고 화면이
+        /// 씬 카메라로 튀면 안 되기 때문이다.
+        /// </summary>
+        public static bool UiPanelOpen { get; set; }
+
         /// <summary>내 몸이 지금 내 화면에 보이는가 (3인칭 이모트 중에만 true).</summary>
         private bool selfVisible;
 
@@ -89,7 +104,7 @@ namespace GhostHunter.Player
 
             if (IsOwner)
             {
-                viewModeApplied = GameManager.IsGameplayActive;
+                viewModeApplied = GameManager.IsFirstPersonActive;
                 ApplyViewMode(viewModeApplied);
             }
         }
@@ -115,7 +130,7 @@ namespace GhostHunter.Player
         }
 
         /// <summary>
-        /// 로비/결과와 게임 중 사이의 시점 전환.
+        /// 결과 화면과 1인칭 사이의 시점 전환.
         ///
         /// NetworkVariable 구독 대신 매 프레임 확인한다 — 상태가 bool 하나뿐이라 비용이 없고,
         /// 스폰 순서에 따라 구독을 놓쳐 "커서가 잠긴 채 로비에 갇히는" 사고를 막을 수 있다.
@@ -128,14 +143,27 @@ namespace GhostHunter.Player
                 return;
             }
 
-            bool active = GameManager.IsGameplayActive;
-            if (active == viewModeApplied)
+            bool active = GameManager.IsFirstPersonActive;
+            if (active != viewModeApplied)
+            {
+                viewModeApplied = active;
+                ApplyViewMode(active);
+            }
+
+            // 커서는 창이 열고 닫힐 때마다 바뀌므로 따로 본다.
+            ApplyCursor(active && !UiPanelOpen);
+        }
+
+        private void ApplyCursor(bool locked)
+        {
+            if (locked == cursorLocked)
             {
                 return;
             }
 
-            viewModeApplied = active;
-            ApplyViewMode(active);
+            cursorLocked = locked;
+            Cursor.lockState = locked ? CursorLockMode.Locked : CursorLockMode.None;
+            Cursor.visible = !locked;
         }
 
         private void LateUpdate()
@@ -257,8 +285,9 @@ namespace GhostHunter.Player
                 audioListener.enabled = gameplayActive;
             }
 
-            Cursor.lockState = gameplayActive ? CursorLockMode.Locked : CursorLockMode.None;
-            Cursor.visible = !gameplayActive;
+            // 커서는 ApplyCursor가 맡는다. 여기서 같이 만지면 창을 연 채로
+            // 단계가 바뀔 때 서로 덮어써서 커서가 잠긴 채 갇힌다.
+            ApplyCursor(gameplayActive && !UiPanelOpen);
         }
 
         private void ApplyFaction(Faction faction)
@@ -282,19 +311,27 @@ namespace GhostHunter.Player
             // 저절로 열리는 문이 곧 위치 제보가 된다.
             // 레이어는 물리 판정이라 서버·클라이언트가 같아야 하는데, 이 메서드는
             // Faction(공개 NetworkVariable)을 따라 전원에게서 같이 돌아가므로 안전하다.
+            //
+            // <b>미배정도 Character로 둔다.</b> 대기방에서 서로 부딪히고 게임 설정 단말을
+            // 조준할 수 있어야 하는데, 레이어가 프리팹 기본값으로 남으면
+            // 상호작용 레이어 마스크에 걸리지 않아 아무것도 안 된다.
             int bodyLayer = LayerMask.NameToLayer(isGhost ? "Soul" : "Character");
-            if (bodyLayer >= 0 && faction != Faction.Unassigned)
+            if (bodyLayer >= 0)
             {
                 gameObject.layer = bodyLayer;
             }
 
-            if (!IsOwner || playerInput == null || faction == Faction.Unassigned)
+            if (!IsOwner || playerInput == null)
             {
                 return;
             }
 
             // 액션맵은 자체 완결형이다 — Move/Look이 각 맵에 들어 있으므로
             // 맵 하나만 활성화해도 이동과 진영 조작이 함께 동작한다.
+            //
+            // <b>미배정이면 퇴마사 맵을 쓴다.</b> 대기방에서는 전원이 퇴마사 모습이고,
+            // 필요한 건 이동·시점·F·Tab뿐이라 이 맵으로 충분하다. 여기서 조기 반환하면
+            // 대기방에서 액션맵이 안 잡혀 <b>아무 키도 안 먹는다.</b>
             playerInput.SwitchCurrentActionMap(isGhost ? "Ghost" : "Exorcist");
         }
 

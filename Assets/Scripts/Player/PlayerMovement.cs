@@ -124,8 +124,9 @@ namespace GhostHunter.Player
                 return;
             }
 
-            // 로비·결과 화면에서는 중력만 적용하고 조작은 받지 않는다.
-            bool canControl = GameManager.IsGameplayActive && !MovementLocked;
+            // 결과 화면에서는 중력만 적용하고 조작은 받지 않는다.
+            // 대기방은 걸어다니는 공간이므로 여기 포함된다.
+            bool canControl = GameManager.IsFirstPersonActive && !MovementLocked;
 
             // 죽은 사람은 움직이지 않는다. 관전 시스템(시나리오 3-6)이 붙기 전까지는
             // 시신이 걸어다니지 않게 하는 것만으로 충분하다.
@@ -142,6 +143,13 @@ namespace GhostHunter.Player
 
             // 이모트 휠을 연 동안에는 마우스가 항목 선택에 쓰이므로 이동도 멈춘다.
             if (emote != null && emote.WheelOpen)
+            {
+                canControl = false;
+            }
+
+            // 게임 설정 단말 같은 창이 떠 있으면 마우스가 UI로 넘어간다. 뒤에서 계속
+            // 걸어다니면 창을 조작하는 동안 벽에 처박힌다.
+            if (PlayerRoleSetup.UiPanelOpen)
             {
                 canControl = false;
             }

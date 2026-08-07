@@ -137,6 +137,34 @@ Wall(8)  Floor(9)  Door(10)  Character(11)  Prop(12)  Soul(13)  LocalBody(14)
 `UnityTransport` 컴포넌트를 붙이는 것만으로는 부족하고 **참조 필드에 따로 연결**해야 한다.
 스크립트로 `AddComponent`만 하면 비어 있다. 증상: `No transport has been selected!` + `StartClient()` NRE.
 
+### ⚠️ `OnNetworkSpawn`에서 RPC를 보내면 묻힌다 — 세 번 밟았다
+
+**증상**: 오류도 경고도 없이 아무 일이 안 일어난다. 값이 그대로거나 위치가 안 바뀐다.
+설정을 안 넣은 것처럼 보여서 인스펙터만 계속 뒤지게 된다.
+
+**원인**: `OnNetworkSpawn`은 스폰 절차가 **끝나기 전**에 불린다. 여기서 보낸 RPC는
+발송은 되지만 스폰이 마무리되면서 사라지거나 초기 상태에 덮인다.
+
+밟은 곳:
+
+| 무엇 | 증상 |
+|---|---|
+| `TeleportRpc` — 접속 시 대기방 배치 | 호스트가 엉뚱한 곳에서 시작 |
+| `SubmitNicknameRpc` — 닉네임 등록 | 이름이 영영 "플레이어 0"·관전 화면도 같음 |
+
+**해결**: 스폰 순간이 아니라 **다음 프레임에** 보낸다.
+
+- 서버가 하는 일이면 매니저의 `Update`에서 "아직 처리 안 한 대상"만 골라 처리한다
+  (`GameManager.PlaceNewcomersInLobby` + `NetworkPlayer.ServerLobbyPlaced`)
+- 소유자가 하는 일이면 `Update`에서 플래그로 한 번만 보낸다
+  (`NetworkPlayer.Update`의 `nicknameSubmitted`)
+
+플래그를 **플레이어 오브젝트에 얹어두면** 나갈 때 같이 사라져, 나갔다 들어온 사람이
+"이미 처리했다"로 잘못 걸리지 않는다.
+
+`OnNetworkSpawn`에 둬도 되는 것: 목록 등록, 이벤트 구독, 컴포넌트 on/off 같은 **로컬 작업**.
+네트워크로 나가는 것만 미루면 된다.
+
 ### UDP 소켓 누수 — "address already in use"
 **증상**: 양쪽 다 미접속인데 호스트 시작이 실패하고, Play를 껐다 켜도 안 풀린다(에디터 종료만 답).
 

@@ -62,7 +62,8 @@ namespace GhostHunter.Exorcist
             // 은신 단계의 퇴마사는 도구를 만질 수 없다 (시나리오 4번 [3]).
             bool blocked = player != null && player.IsExorcist && !GameManager.ExorcistsCanAct;
 
-            if (!IsOwner || !GameManager.IsGameplayActive || blocked)
+            // 대기방에서도 살아 있어야 한다 — 게임 설정 단말을 F로 열어야 하기 때문이다.
+            if (!IsOwner || !GameManager.IsFirstPersonActive || blocked)
             {
                 Target = null;
                 interactQueued = false;
@@ -100,6 +101,10 @@ namespace GhostHunter.Exorcist
 
                 case Altar altar:
                     altar.RequestOffer(player);
+                    break;
+
+                case LobbyConsole console:
+                    console.Interact(player);
                     break;
             }
         }

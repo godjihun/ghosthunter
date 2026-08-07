@@ -2548,6 +2548,75 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 93b7aedd3b98ae54d86c54aa11d81533, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::GhostHunter.Tools.ToolSpawnPoint
+--- !u!1 &673749748
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 673749753}
+  - component: {fileID: 673749750}
+  - component: {fileID: 673749749}
+  m_Layer: 12
+  m_Name: LobbyConsole
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &673749749
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 673749748}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f6725f86e1d80fe4499cc8ec403a21d9, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::GhostHunter.Game.LobbyConsole
+  promptAnchor: {fileID: 772282964}
+--- !u!65 &673749750
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 673749748}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 0.6567689, y: 1.3500001, z: 0.59372276}
+  m_Center: {x: -2.2737368e-13, y: 0.675, z: -0.0000014305117}
+--- !u!4 &673749753
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 673749748}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: -0.7071068, z: 0, w: 0.7071068}
+  m_LocalPosition: {x: 4, y: -0.0099880695, z: -112}
+  m_LocalScale: {x: 1.5, y: 1.5, z: 1.5}
+  m_ConstrainProportionsScale: 0
+  m_Children:
+  - {fileID: 772282964}
+  - {fileID: 746500067}
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &681442668
 GameObject:
   m_ObjectHideFlags: 0
@@ -2862,6 +2931,104 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 93b7aedd3b98ae54d86c54aa11d81533, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::GhostHunter.Tools.ToolSpawnPoint
+--- !u!1001 &746500066
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 673749753}
+    m_Modifications:
+    - target: {fileID: -8069866040570937082, guid: be9eaf37c3c48eb43be7bee4f26801ef, type: 3}
+      propertyPath: m_Layer
+      value: 12
+      objectReference: {fileID: 0}
+    - target: {fileID: -6689036041284674117, guid: be9eaf37c3c48eb43be7bee4f26801ef, type: 3}
+      propertyPath: m_Name
+      value: Visual
+      objectReference: {fileID: 0}
+    - target: {fileID: -6689036041284674117, guid: be9eaf37c3c48eb43be7bee4f26801ef, type: 3}
+      propertyPath: m_Layer
+      value: 12
+      objectReference: {fileID: 0}
+    - target: {fileID: 2484665033948473043, guid: be9eaf37c3c48eb43be7bee4f26801ef, type: 3}
+      propertyPath: m_Layer
+      value: 12
+      objectReference: {fileID: 0}
+    - target: {fileID: 2774220344278030320, guid: be9eaf37c3c48eb43be7bee4f26801ef, type: 3}
+      propertyPath: m_LocalScale.x
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 2774220344278030320, guid: be9eaf37c3c48eb43be7bee4f26801ef, type: 3}
+      propertyPath: m_LocalScale.y
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 2774220344278030320, guid: be9eaf37c3c48eb43be7bee4f26801ef, type: 3}
+      propertyPath: m_LocalScale.z
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 2774220344278030320, guid: be9eaf37c3c48eb43be7bee4f26801ef, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2774220344278030320, guid: be9eaf37c3c48eb43be7bee4f26801ef, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 0.011144996
+      objectReference: {fileID: 0}
+    - target: {fileID: 2774220344278030320, guid: be9eaf37c3c48eb43be7bee4f26801ef, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: -0.05834961
+      objectReference: {fileID: 0}
+    - target: {fileID: 2774220344278030320, guid: be9eaf37c3c48eb43be7bee4f26801ef, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 0.7071068
+      objectReference: {fileID: 0}
+    - target: {fileID: 2774220344278030320, guid: be9eaf37c3c48eb43be7bee4f26801ef, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: -0.7071068
+      objectReference: {fileID: 0}
+    - target: {fileID: 2774220344278030320, guid: be9eaf37c3c48eb43be7bee4f26801ef, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2774220344278030320, guid: be9eaf37c3c48eb43be7bee4f26801ef, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2774220344278030320, guid: be9eaf37c3c48eb43be7bee4f26801ef, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2774220344278030320, guid: be9eaf37c3c48eb43be7bee4f26801ef, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2774220344278030320, guid: be9eaf37c3c48eb43be7bee4f26801ef, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3734174551182995659, guid: be9eaf37c3c48eb43be7bee4f26801ef, type: 3}
+      propertyPath: m_LocalScale.x
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 6000551023557906665, guid: be9eaf37c3c48eb43be7bee4f26801ef, type: 3}
+      propertyPath: m_Layer
+      value: 12
+      objectReference: {fileID: 0}
+    - target: {fileID: 8978103523514716507, guid: be9eaf37c3c48eb43be7bee4f26801ef, type: 3}
+      propertyPath: m_Layer
+      value: 12
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: -5645937942226959685, guid: be9eaf37c3c48eb43be7bee4f26801ef, type: 3}
+--- !u!4 &746500067 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 2774220344278030320, guid: be9eaf37c3c48eb43be7bee4f26801ef, type: 3}
+  m_PrefabInstance: {fileID: 746500066}
+  m_PrefabAsset: {fileID: 0}
 --- !u!64 &748458994
 MeshCollider:
   m_ObjectHideFlags: 0
@@ -3060,6 +3227,37 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 93b7aedd3b98ae54d86c54aa11d81533, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::GhostHunter.Tools.ToolSpawnPoint
+--- !u!1 &772282963
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 772282964}
+  m_Layer: 12
+  m_Name: PromptAnchor
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &772282964
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 772282963}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 1.25, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 673749753}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &804614034
 GameObject:
   m_ObjectHideFlags: 0
@@ -3381,6 +3579,37 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 93b7aedd3b98ae54d86c54aa11d81533, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::GhostHunter.Tools.ToolSpawnPoint
+--- !u!1 &874661311
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 874661312}
+  m_Layer: 0
+  m_Name: LobbySpawnPoint
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &874661312
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 874661311}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0.7071068, z: 0, w: 0.7071068}
+  m_LocalPosition: {x: -5, y: 0.5, z: -112}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &894164659
 GameObject:
   m_ObjectHideFlags: 0
@@ -7348,6 +7577,7 @@ GameObject:
   - component: {fileID: 2135491853}
   - component: {fileID: 2135491852}
   - component: {fileID: 2135491854}
+  - component: {fileID: 2135491855}
   m_Layer: 0
   m_Name: GameManager
   m_TagString: Untagged
@@ -7428,6 +7658,7 @@ MonoBehaviour:
   - {fileID: 1503879521}
   - {fileID: 133178786}
   - {fileID: 1501720071}
+  lobbySpawnPoint: {fileID: 874661312}
   fallResetHeight: -30
 --- !u!114 &2135491854
 MonoBehaviour:
@@ -7443,6 +7674,18 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::GhostHunter.UI.GameHudUI
   slotSize: 84
   slotBottomMargin: 24
+--- !u!114 &2135491855
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2135491849}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: aff384203cc185f499d9e7a063c18d76, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::GhostHunter.UI.PauseMenuUI
 --- !u!4 &67598562271437985
 Transform:
   m_ObjectHideFlags: 0
@@ -7821,7 +8064,7 @@ GameObject:
   - component: {fileID: 1040208475663057195}
   - component: {fileID: 6618187088713808833}
   - component: {fileID: 348629265}
-  m_Layer: 10
+  m_Layer: 8
   m_Name: BasementDoor1
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -9551,7 +9794,7 @@ GameObject:
   - component: {fileID: 6497059282187433191}
   - component: {fileID: 8644322389279277799}
   - component: {fileID: 1431385761}
-  m_Layer: 10
+  m_Layer: 8
   m_Name: Door015
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -10250,3 +10493,5 @@ SceneRoots:
   - {fileID: 638435858}
   - {fileID: 2135372655}
   - {fileID: 728336664}
+  - {fileID: 673749753}
+  - {fileID: 874661312}
