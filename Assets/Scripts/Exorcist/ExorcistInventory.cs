@@ -61,8 +61,12 @@ namespace GhostHunter.Exorcist
 
             // 이모트 휠이 열려 있으면 좌클릭은 춤 선택이다.
             // 안 막으면 춤을 고르는 순간 들고 있던 도구까지 써버린다.
+            //
+            // <b>춤이 재생되는 동안도 막는다.</b> 그때는 카메라가 3인칭으로 뒤로 빠져
+            // 시야가 넓어지는데, 탐지가 화면 기준이 되면서 그게 그대로 이득이 됐다 —
+            // 춤을 켜고 도구를 쓰는 게 최적 전략이 되어버린다.
             var emote = GetComponent<PlayerEmote>();
-            if (emote != null && emote.WheelOpen)
+            if (emote != null && (emote.WheelOpen || emote.IsEmoting))
             {
                 return;
             }
@@ -72,7 +76,17 @@ namespace GhostHunter.Exorcist
             // 여기서 앞당기는 건 "썼다"는 동작뿐이다.
             GetComponent<PlayerAnimation>()?.PlayPickup();
 
-            UseToolRpc(transform.position);
+            // <b>시점은 클라이언트가 보내야 한다.</b> 상하 각도는 카메라 피벗에만 있고
+            // 네트워크로 동기화되지 않아서 서버는 알 방법이 없다. 좌표를 보내던 것과
+            // 같은 신뢰 수준이고, 어차피 귀신 위치를 모르니 각도를 속여도 이득이 없다.
+            // <b>판정 자체는 여전히 서버가 한다.</b>
+            var cam = GetComponentInChildren<Camera>(true);
+            if (cam == null)
+            {
+                return;
+            }
+
+            UseToolRpc(cam.transform.position, cam.transform.rotation, cam.fieldOfView, cam.aspect);
         }
 
         public void OnDropTool(InputValue value)
@@ -155,7 +169,8 @@ namespace GhostHunter.Exorcist
         }
 
         [Rpc(SendTo.Server)]
-        private void UseToolRpc(Vector3 usePosition, RpcParams rpcParams = default)
+        private void UseToolRpc(Vector3 eyePosition, Quaternion eyeRotation,
+            float verticalFov, float aspect, RpcParams rpcParams = default)
         {
             if (!HasTool.Value || !player.IsAlive.Value)
             {
@@ -172,7 +187,8 @@ namespace GhostHunter.Exorcist
             // 사용하면 사라진다 (시나리오 3-1).
             HasTool.Value = false;
 
-            bool detected = DetectionJudge.Judge(usePosition, toolType, Config);
+            bool detected = DetectionJudge.Judge(
+                eyePosition, eyeRotation, verticalFov, aspect, toolType, Config);
 
             if (detected)
             {

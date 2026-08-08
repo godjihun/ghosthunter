@@ -1,17 +1,20 @@
 using GhostHunter.Exorcist;
-using GhostHunter.Game;
 using Unity.Netcode;
 using UnityEngine;
 
 namespace GhostHunter.Tools
 {
     /// <summary>
-    /// 도구를 손에 들면 바닥에 탐지 반경을 원으로 표시한다 (시나리오 3-1).
+    /// 예전에 바닥에 탐지 반경을 원으로 그리던 표시. <b>지금은 아무것도 그리지 않는다.</b>
     ///
-    /// <b>테두리만</b> 그린다. 원판을 꽉 채우면 바닥 텍스처와 발밑이 가려져
-    /// 도구를 든 동안 계속 시야가 답답해진다. 반경만 알면 되는 표시다.
+    /// 탐지가 <b>반경에서 시야로</b> 바뀌면서 이 원은 거짓말이 됐다 — 이제는 발밑 원 안에
+    /// 있느냐가 아니라 도구를 쓴 순간 <b>화면 안에 들어왔느냐</b>로 판정한다
+    /// (<see cref="DetectionJudge"/>). 원을 계속 그리면 "원 안으로 들어가면 잡힌다"고
+    /// 잘못 배우게 되므로 지웠다.
     ///
-    /// <b>로컬 표시 전용</b>이다. 반경은 설정값에서 계산되므로 동기화할 필요가 없다.
+    /// <b>컴포넌트를 없애지 않은 이유</b>: 플레이어 프리팹과
+    /// <c>PlayerRoleSetup</c>이 이 타입을 참조하고 있다. 시야를 알려주는 표시를
+    /// 새로 만들 때 이 자리를 그대로 쓰면 된다.
     /// </summary>
     [RequireComponent(typeof(ExorcistInventory))]
     public class DetectionRadiusView : NetworkBehaviour
@@ -19,105 +22,14 @@ namespace GhostHunter.Tools
         [Tooltip("예전 원판 오브젝트. 남아 있으면 꺼둔다.")]
         [SerializeField] private Transform radiusVisual;
 
-        [SerializeField] private Color ringColor = new(0.45f, 0.85f, 1f, 0.9f);
-        [SerializeField] private float lineWidth = 0.04f;
-
-        [Tooltip("원을 몇 개의 점으로 그릴지. 낮으면 각져 보인다.")]
-        [SerializeField] private int segments = 72;
-
-        private ExorcistInventory inventory;
-        private LineRenderer ring;
-
-        private void Awake()
-        {
-            inventory = GetComponent<ExorcistInventory>();
-        }
-
         public override void OnNetworkSpawn()
         {
-            // 남의 반경까지 그릴 이유가 없다.
-            if (!IsOwner)
-            {
-                if (radiusVisual != null)
-                {
-                    radiusVisual.gameObject.SetActive(false);
-                }
-                enabled = false;
-                return;
-            }
-
-            // 채워진 원판은 더 이상 쓰지 않는다.
             if (radiusVisual != null)
             {
                 radiusVisual.gameObject.SetActive(false);
             }
 
-            BuildRing();
-            inventory.OnHeldToolChanged += Refresh;
-            Refresh();
-        }
-
-        public override void OnNetworkDespawn()
-        {
-            if (inventory != null)
-            {
-                inventory.OnHeldToolChanged -= Refresh;
-            }
-        }
-
-        private void BuildRing()
-        {
-            var go = new GameObject("DetectionRing");
-            go.transform.SetParent(transform, false);
-
-            // 바닥과 겹쳐 깜빡이지 않도록 살짝 띄운다.
-            go.transform.localPosition = new Vector3(0f, 0.05f, 0f);
-
-            ring = go.AddComponent<LineRenderer>();
-            ring.useWorldSpace = false;
-            ring.loop = true;
-            ring.widthMultiplier = lineWidth;
-            ring.numCapVertices = 2;
-            ring.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-            ring.receiveShadows = false;
-            ring.alignment = LineAlignment.TransformZ;
-
-            var shader = Shader.Find("Universal Render Pipeline/Unlit") ?? Shader.Find("Sprites/Default");
-            var mat = new Material(shader) { hideFlags = HideFlags.HideAndDontSave };
-            if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", ringColor);
-            if (mat.HasProperty("_Color")) mat.SetColor("_Color", ringColor);
-            ring.material = mat;
-
-            ring.startColor = ringColor;
-            ring.endColor = ringColor;
-            ring.enabled = false;
-        }
-
-        private void Refresh()
-        {
-            if (ring == null)
-            {
-                return;
-            }
-
-            bool show = inventory.HasTool.Value;
-            ring.enabled = show;
-            if (!show)
-            {
-                return;
-            }
-
-            var config = GameManager.Config;
-            float radius = config != null ? config.DetectionRadius : 3f;
-
-            int count = Mathf.Max(8, segments);
-            ring.positionCount = count;
-            for (int i = 0; i < count; i++)
-            {
-                float a = i * Mathf.PI * 2f / count;
-                // 원은 XZ 평면(바닥)에 눕는다. 이 오브젝트의 로컬 y는 위쪽이다.
-                ring.SetPosition(i, new Vector3(Mathf.Cos(a) * radius, 0f, Mathf.Sin(a) * radius));
-            }
+            enabled = false;
         }
     }
 }

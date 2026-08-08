@@ -16,8 +16,10 @@ MonoBehaviour:
   InvestigationDuration: 120
   FearSkillCooldown: 30
   ToolNullifyDuration: 15
-  DetectionRadius: 5
+  DetectionRange: 50
   AbsorbGaugePerHit: 20
+  DetectionThroughWalls: 0
+  DebugDetection: 0
   HuntDuration: 60
   ExorcistMoveSpeed: 4
   SoulMoveSpeed: 4

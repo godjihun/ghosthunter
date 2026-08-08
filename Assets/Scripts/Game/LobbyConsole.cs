@@ -20,7 +20,7 @@ namespace GhostHunter.Game
         [SerializeField] private Transform promptAnchor;
 
         private const float PanelWidth = 460f;
-        private const float PanelHeight = 430f;
+        private const float PanelHeight = 490f;
 
         private bool panelOpen;
         private GUIStyle titleStyle;
@@ -158,18 +158,22 @@ namespace GhostHunter.Game
 
             for (int i = 0; i < LobbySettings.Fields.Length; i++)
             {
-                var (label, min, max, unit) = LobbySettings.Fields[i];
+                var (label, min, max, step, unit) = LobbySettings.Fields[i];
                 float value = settings[i];
 
                 GUILayout.BeginHorizontal();
                 GUILayout.Label(label, GUILayout.Width(130));
-                float next = GUILayout.HorizontalSlider(value, min, max, GUILayout.Width(190));
-                GUILayout.Label($"{Mathf.Round(next)}{unit}", GUILayout.Width(60));
+                float raw = GUILayout.HorizontalSlider(value, min, max, GUILayout.Width(190));
+
+                // 슬라이더는 아주 미세한 값도 뱉는다. 눈금 단위로 끊어야
+                // 매 프레임 "바뀌었다"고 판단해 네트워크로 계속 쏘지 않는다.
+                //
+                // 도구 개수는 눈금이 6이다 — 6의 배수가 아니면 나머지가 배치되지 않는다.
+                float next = Mathf.Round(raw / step) * step;
+
+                GUILayout.Label($"{next}{unit}", GUILayout.Width(60));
                 GUILayout.EndHorizontal();
 
-                // 슬라이더는 아주 미세한 값도 뱉는다. 반올림해서 담아야
-                // 매 프레임 "바뀌었다"고 판단해 네트워크로 계속 쏘지 않는다.
-                next = Mathf.Round(next);
                 if (!Mathf.Approximately(next, value))
                 {
                     settings[i] = next;

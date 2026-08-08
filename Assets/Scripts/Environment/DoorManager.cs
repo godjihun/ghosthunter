@@ -111,5 +111,22 @@ namespace GhostHunter.Environment
         {
             doorBits.Value ^= 1ul << doorIndex;
         }
+
+        /// <summary>
+        /// 문을 전부 닫는다. 서버 전용.
+        ///
+        /// <b>새 판을 시작할 때 반드시 불러야 한다.</b> 이 컴포넌트는 씬 오브젝트라
+        /// <c>Shutdown()</c>으로 파괴되지 않아서, 방을 다시 만들어도 지난 판에 열어둔
+        /// 문이 그대로 열려 있다. 귀신이 숨기 전에 동선이 이미 드러나 있는 셈이 된다.
+        /// </summary>
+        public void ServerCloseAll()
+        {
+            if (!IsServer)
+            {
+                return;
+            }
+
+            doorBits.Value = 0ul;
+        }
     }
 }

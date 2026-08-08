@@ -20,8 +20,20 @@ namespace GhostHunter.Core
         public float InvestigationDuration;
         public float FearSkillCooldown;
         public float ToolNullifyDuration;
-        public float DetectionRadius;
+        public float DetectionRange;
         public float AbsorbGaugePerHit;
+
+        /// <summary>
+        /// 맵에 뿌릴 도구 총 개수. <b>반드시 도구 종류 수(6)의 배수여야 한다.</b>
+        ///
+        /// 종류당 개수는 <c>총개수 ÷ 6</c>을 <b>내림</b>해서 구한다. 6의 배수가 아니면
+        /// 나머지가 그냥 사라진다 — 20을 넣으면 18개만 나온다. 그래서 슬라이더가
+        /// 6칸씩 움직이게 해두었다(<see cref="Fields"/>의 Step).
+        /// </summary>
+        public float TotalToolCount;
+
+        /// <summary>사냥 단계 지속 시간(초).</summary>
+        public float HuntDuration;
 
         public static LobbySettings From(GameConfig config)
         {
@@ -31,8 +43,10 @@ namespace GhostHunter.Core
                 InvestigationDuration = config.InvestigationDuration,
                 FearSkillCooldown = config.FearSkillCooldown,
                 ToolNullifyDuration = config.ToolNullifyDuration,
-                DetectionRadius = config.DetectionRadius,
+                DetectionRange = config.DetectionRange,
                 AbsorbGaugePerHit = config.AbsorbGaugePerHit,
+                TotalToolCount = config.TotalToolCount,
+                HuntDuration = config.HuntDuration,
             };
         }
 
@@ -43,19 +57,28 @@ namespace GhostHunter.Core
             config.InvestigationDuration = InvestigationDuration;
             config.FearSkillCooldown = FearSkillCooldown;
             config.ToolNullifyDuration = ToolNullifyDuration;
-            config.DetectionRadius = DetectionRadius;
+            config.DetectionRange = DetectionRange;
             config.AbsorbGaugePerHit = AbsorbGaugePerHit;
+            config.TotalToolCount = Mathf.RoundToInt(TotalToolCount);
+            config.HuntDuration = HuntDuration;
         }
 
-        /// <summary>슬라이더로 만질 수 있는 항목들. UI가 이 표를 그대로 그린다.</summary>
-        public static readonly (string Label, float Min, float Max, string Unit)[] Fields =
+        /// <summary>
+        /// 슬라이더로 만질 수 있는 항목들. UI가 이 표를 그대로 그린다.
+        ///
+        /// <c>Step</c>은 슬라이더가 몇 단위로 끊길지다. 도구 개수만 6인 이유는
+        /// 6의 배수가 아니면 나머지가 배치되지 않기 때문이다.
+        /// </summary>
+        public static readonly (string Label, float Min, float Max, float Step, string Unit)[] Fields =
         {
-            ("은신 시간", 10f, 90f, "초"),
-            ("조사 시간", 120f, 900f, "초"),
-            ("공포스킬 쿨타임", 5f, 90f, "초"),
-            ("재은신 시간", 5f, 40f, "초"),
-            ("도구 탐지 반경", 1f, 12f, "m"),
-            ("게이지 상승량", 5f, 50f, "%"),
+            ("은신 시간", 10f, 90f, 1f, "초"),
+            ("조사 시간", 120f, 900f, 1f, "초"),
+            ("공포스킬 쿨타임", 5f, 90f, 1f, "초"),
+            ("재은신 시간", 5f, 40f, 1f, "초"),
+            ("도구 탐지 사거리", 5f, 60f, 1f, "m"),
+            ("게이지 상승량", 5f, 50f, 1f, "%"),
+            ("도구 총 개수", 30f, 84f, 6f, "개"),
+            ("사냥 시간", 30f, 180f, 5f, "초"),
         };
 
         public float this[int index]
@@ -66,8 +89,10 @@ namespace GhostHunter.Core
                 1 => InvestigationDuration,
                 2 => FearSkillCooldown,
                 3 => ToolNullifyDuration,
-                4 => DetectionRadius,
-                _ => AbsorbGaugePerHit,
+                4 => DetectionRange,
+                5 => AbsorbGaugePerHit,
+                6 => TotalToolCount,
+                _ => HuntDuration,
             };
             set
             {
@@ -77,8 +102,10 @@ namespace GhostHunter.Core
                     case 1: InvestigationDuration = value; break;
                     case 2: FearSkillCooldown = value; break;
                     case 3: ToolNullifyDuration = value; break;
-                    case 4: DetectionRadius = value; break;
-                    default: AbsorbGaugePerHit = value; break;
+                    case 4: DetectionRange = value; break;
+                    case 5: AbsorbGaugePerHit = value; break;
+                    case 6: TotalToolCount = value; break;
+                    default: HuntDuration = value; break;
                 }
             }
         }
@@ -89,8 +116,10 @@ namespace GhostHunter.Core
             serializer.SerializeValue(ref InvestigationDuration);
             serializer.SerializeValue(ref FearSkillCooldown);
             serializer.SerializeValue(ref ToolNullifyDuration);
-            serializer.SerializeValue(ref DetectionRadius);
+            serializer.SerializeValue(ref DetectionRange);
             serializer.SerializeValue(ref AbsorbGaugePerHit);
+            serializer.SerializeValue(ref TotalToolCount);
+            serializer.SerializeValue(ref HuntDuration);
         }
 
         // NetworkVariable은 값이 실제로 바뀌었는지 비교해야 하므로 필요하다.
@@ -100,14 +129,16 @@ namespace GhostHunter.Core
                 && Mathf.Approximately(InvestigationDuration, other.InvestigationDuration)
                 && Mathf.Approximately(FearSkillCooldown, other.FearSkillCooldown)
                 && Mathf.Approximately(ToolNullifyDuration, other.ToolNullifyDuration)
-                && Mathf.Approximately(DetectionRadius, other.DetectionRadius)
-                && Mathf.Approximately(AbsorbGaugePerHit, other.AbsorbGaugePerHit);
+                && Mathf.Approximately(DetectionRange, other.DetectionRange)
+                && Mathf.Approximately(AbsorbGaugePerHit, other.AbsorbGaugePerHit)
+                && Mathf.Approximately(TotalToolCount, other.TotalToolCount)
+                && Mathf.Approximately(HuntDuration, other.HuntDuration);
         }
 
         public override bool Equals(object obj) => obj is LobbySettings other && Equals(other);
 
         public override int GetHashCode() => System.HashCode.Combine(
             HidingDuration, InvestigationDuration, FearSkillCooldown,
-            ToolNullifyDuration, DetectionRadius, AbsorbGaugePerHit);
+            ToolNullifyDuration, DetectionRange, AbsorbGaugePerHit, TotalToolCount, HuntDuration);
     }
 }
