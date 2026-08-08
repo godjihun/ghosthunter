@@ -138,6 +138,9 @@ namespace GhostHunter.Game
         /// <summary>서버만 아는 진짜 약점. 절대 공개 NetworkVariable에 넣지 말 것.</summary>
         private WeaknessSet serverWeakness;
 
+        /// <summary>다음 프레임에 판 상태를 초기화해야 하는가. OnNetworkSpawn 주석 참고.</summary>
+        private bool pendingReset;
+
         public WeaknessSet ServerWeakness => serverWeakness;
 
         private void Awake()
@@ -160,10 +163,21 @@ namespace GhostHunter.Game
 
         public override void OnNetworkSpawn()
         {
-            if (IsServer && config != null)
+            if (IsServer)
             {
-                // 처음 값은 에셋에 적힌 그대로. 방장이 만지기 전까지 이게 기본값이다.
-                Settings.Value = LobbySettings.From(config);
+                // <b>지난 판의 흔적을 지우고 시작한다.</b> 씬 오브젝트라 Shutdown()으로도
+                // 파괴되지 않아서, 방을 다시 만들면 단계·게이지·약점이 그대로 살아 있다.
+                //
+                // 여기서 바로 하지 않고 한 프레임 미룬다 — 제단·문 같은 다른 씬
+                // NetworkObject가 아직 스폰되기 전일 수 있고, 그러면 그쪽 초기화가
+                // 조용히 무시된다. 씬 오브젝트끼리는 스폰 순서가 보장되지 않는다.
+                pendingReset = true;
+
+                if (config != null)
+                {
+                    // 처음 값은 에셋에 적힌 그대로. 방장이 만지기 전까지 이게 기본값이다.
+                    Settings.Value = LobbySettings.From(config);
+                }
             }
 
             Settings.OnValueChanged += OnSettingsChanged;
@@ -560,6 +574,13 @@ namespace GhostHunter.Game
                 return;
             }
 
+            if (pendingReset)
+            {
+                // 씬 NetworkObject가 전부 스폰된 뒤에 지운다 (OnNetworkSpawn 주석 참고).
+                pendingReset = false;
+                ServerResetToLobby();
+            }
+
             RescueFallenPlayers();
 
             var phase = Phase.Value;
@@ -626,8 +647,30 @@ namespace GhostHunter.Game
                 return;
             }
 
+            ServerResetToLobby();
+
+            // 단계만 되돌리면 저택 한복판에 그대로 서 있게 된다. 몸도 같이 옮긴다.
+            MarkEveryoneForLobby();
+        }
+
+        /// <summary>
+        /// 판에 관한 모든 상태를 대기방 기준으로 되돌린다. 서버 전용.
+        ///
+        /// <b>호스트를 다시 시작할 때도 반드시 불러야 한다.</b> 이 컴포넌트는 씬
+        /// 오브젝트라 <c>Shutdown()</c>으로 파괴되지 않는다 — 단계·게이지·약점이
+        /// 메모리에 그대로 남아 있다가, 새 방을 만들면 <b>지난 판이 이어서 돌아간다.</b>
+        /// 호스트의 브라우저가 끊겼다 다시 방을 만들었을 때 바로 이 일이 벌어졌다.
+        /// </summary>
+        private void ServerResetToLobby()
+        {
+            if (!IsServer)
+            {
+                return;
+            }
+
             ToolSpawner.Instance?.DespawnAll();
             Altar.Instance?.ServerClear();
+            Environment.DoorManager.Instance?.ServerCloseAll();
 
             // 영혼 상태·본체 좌표·본체 고정·쿨타임을 한 번에 지운다.
             // 하나라도 남으면 새 판이 이전 판 상태를 물려받는다.
@@ -652,9 +695,6 @@ namespace GhostHunter.Game
 
             Phase.Value = GamePhase.Lobby;
             PhaseTimeRemaining.Value = 0f;
-
-            // 단계만 되돌리면 저택 한복판에 그대로 서 있게 된다. 몸도 같이 옮긴다.
-            MarkEveryoneForLobby();
         }
 
         /// <summary>

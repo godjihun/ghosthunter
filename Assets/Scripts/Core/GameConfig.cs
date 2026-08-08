@@ -26,18 +26,29 @@ namespace GhostHunter.Core
         [Tooltip("탐지된 후 도구 무효화가 유지되는 시간 = 재은신 여유. 귀신이 도망칠 틈이 없으면 늘린다.")]
         public float ToolNullifyDuration = 15f;
 
-        [Tooltip("도구 사용 시 탐지 반경(m). 이 값이 난이도에 가장 직접적이다.")]
-        public float DetectionRadius = 3f;
+        [Tooltip("도구 사용 시 탐지 사거리(m). 이 거리 안에서 화면에 들어와야 잡힌다. " +
+                 "반경이 아니라 '보이는 거리'이므로 예전 반경보다 크게 잡아야 비슷한 체감이 된다.")]
+        public float DetectionRange = 50f;
 
         [Tooltip("공포스킬 1회 성공 시 현실화 게이지 상승량(%). " +
                  "쿨타임과 곱해져 최소 현실화 시간을 만든다 — 기본값이면 30초 × 5회 = 2분. " +
                  "둘 중 하나만 바꿔도 판의 성격이 달라지므로 항상 함께 볼 것.")]
         public float AbsorbGaugePerHit = 20f;
 
+        [Tooltip("사냥 단계 지속 시간. 짧으면 퇴마사가 숨어서 버티는 것만으로 이기고, " +
+                 "길면 귀신이 전원을 잡을 시간이 충분해진다.")]
+        public float HuntDuration = 60f;
+
         [Header("── 고정 상수 (조절 불가) ──")]
 
-        [Tooltip("사냥 단계 지속 시간.")]
-        public float HuntDuration = 60f;
+        [Tooltip("탐지가 벽을 통과하는가. 끄면 사이가 막혀 있을 때 실패한다. " +
+                 "켜면 벽 너머 먼 귀신까지 잡혀 사거리만으로는 밸런스를 잡기 어려워진다.")]
+        public bool DetectionThroughWalls = false;
+
+        [Tooltip("탐지가 실패한 이유를 서버 콘솔에 찍는다. 밸런스 조정용. " +
+                 "⚠️ 귀신 위치가 로그에 남으므로 실제 플레이에서는 반드시 꺼둘 것 — " +
+                 "호스트가 퇴마사면 콘솔만 봐도 답을 알게 된다.")]
+        public bool DebugDetection = false;
 
         [Tooltip("퇴마사 이동속도(m/s).")]
         public float ExorcistMoveSpeed = 4f;
