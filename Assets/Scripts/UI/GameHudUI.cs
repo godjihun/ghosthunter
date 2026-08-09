@@ -811,7 +811,10 @@ namespace GhostHunter.UI
         }
 
 
-        /// <summary>화면 하단 중앙 아이템 창. 비어 있어도 자리를 유지해 위치를 익히게 한다.</summary>
+        /// <summary>
+        /// 화면 하단 중앙 아이템 창. <b>칸 수는 항상 최대치만큼</b> 그린다 —
+        /// 빈 칸이 보여야 "몇 개까지 들 수 있는지"와 "1~4로 고른다"가 눈에 익는다.
+        /// </summary>
         private void DrawInventorySlot(NetworkPlayer local)
         {
             var inventory = local.GetComponent<ExorcistInventory>();
@@ -820,28 +823,52 @@ namespace GhostHunter.UI
                 return;
             }
 
-            var rect = new Rect(
-                (Screen.width - slotSize) * 0.5f,
-                Screen.height - slotSize - slotBottomMargin,
-                slotSize, slotSize);
+            int capacity = inventory.Capacity;
 
-            GUI.DrawTexture(rect, barBack);
-            GUI.Box(rect, GUIContent.none);
+            const float Gap = 6f;
+            float total = capacity * slotSize + (capacity - 1) * Gap;
+            float left = (Screen.width - total) * 0.5f;
+            float top = Screen.height - slotSize - slotBottomMargin;
 
-            if (inventory.HasTool.Value)
+            for (int i = 0; i < capacity; i++)
             {
-                var type = inventory.HeldTool.Value;
-                GUI.Label(new Rect(rect.x, rect.y + rect.height * 0.5f - 10f, rect.width, 20f),
-                    type.ToKorean(), slotLabelStyle);
-                GUI.Label(new Rect(rect.x, rect.yMax + 2f, rect.width, 18f),
-                    "좌클릭 사용 / G 버리기", slotLabelStyle);
+                var rect = new Rect(left + i * (slotSize + Gap), top, slotSize, slotSize);
+                // 칸은 고정이다 — i번 칸에 도구가 있는지를 직접 묻는다.
+                bool filled = inventory.HasToolAt(i);
 
-            }
-            else
-            {
+                // 빈 칸을 고른 상태(= 맨손)도 표시해야 한다. 줍기·회수가 그 상태에서 된다.
+                bool selected = i == inventory.SelectedSlot.Value;
+
+                GUI.DrawTexture(rect, barBack);
+                GUI.Box(rect, GUIContent.none);
+
+                // 고른 칸은 테두리를 한 겹 더 그려 구분한다.
+                if (selected)
+                {
+                    GUI.Box(new Rect(rect.x - 2f, rect.y - 2f, rect.width + 4f, rect.height + 4f), GUIContent.none);
+                }
+
+                GUI.Label(new Rect(rect.x + 4f, rect.y + 2f, 20f, 16f), (i + 1).ToString(), slotLabelStyle);
+
+                if (!filled)
+                {
+                    continue;
+                }
+
                 GUI.Label(new Rect(rect.x, rect.y + rect.height * 0.5f - 10f, rect.width, 20f),
-                    "비어 있음", slotLabelStyle);
+                    inventory.TypeAt(i).ToKorean(), slotLabelStyle);
+
+                // 쿨타임은 숫자로만 보여준다. 남은 초를 알면 팀이 사용 순서를 짤 수 있다.
+                float cooldown = inventory.CooldownAt(i);
+                if (cooldown > 0.05f)
+                {
+                    GUI.Label(new Rect(rect.x, rect.yMax - 20f, rect.width, 18f),
+                        $"{Mathf.CeilToInt(cooldown)}초", slotLabelStyle);
+                }
             }
+
+            GUI.Label(new Rect(left, top + slotSize + 2f, total, 18f),
+                "1~4 선택  좌클릭 사용  G 내려놓기", slotLabelStyle);
         }
     }
 }

@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using GhostHunter.Core;
 using GhostHunter.Game;
 using GhostHunter.Ghost;
@@ -12,32 +13,124 @@ namespace GhostHunter.Exorcist
     /// <summary>
     /// 퇴마사의 도구 소지·사용 (시나리오 3-1, 3-2 / 기술 문서 5-1, 5-2).
     ///
-    /// <b>최대 1개만 소지</b>한다. 모든 판정은 서버가 하고, 클라이언트는 요청만 보낸다.
+    /// <b>도구는 소모품이 아니다.</b> 저택에 종류당 하나씩(총 6개)만 있고, 쓰면 사라지는 대신
+    /// 쿨타임이 돈다.
+    ///
+    /// <b>칸은 고정 4개다.</b> 목록을 앞에서부터 채우는 방식이 아니라, 1~4번 키로 고른
+    /// <b>그 칸에</b> 넣고 빼고 쓴다 — 그래야 "3번 칸의 십자가"처럼 위치가 손에 익는다.
+    /// 압축 목록이면 하나 버릴 때마다 뒤 칸이 앞으로 당겨져 번호가 계속 바뀐다.
+    ///
+    /// <b>쿨타임은 들고 있던 도구 전부에 함께 걸린다.</b> 한 사람이 4개를 쥐고 번갈아 쓰면
+    /// 혼자서 저택의 탐지 수단을 독점하게 되므로, 하나를 쓰면 손에 있는 나머지도 같이 묶인다.
+    /// 나눠 들수록 팀 전체의 탐지 빈도가 올라가는 구조다.
+    ///
+    /// 모든 판정은 서버가 하고, 클라이언트는 요청만 보낸다.
     /// 탐지 결과는 RpcTarget.Single로 <b>사용한 본인에게만</b> 돌아간다.
     /// </summary>
     [RequireComponent(typeof(NetworkPlayer))]
     public class ExorcistInventory : NetworkBehaviour
     {
-        /// <summary>손에 든 도구 종류. 눈에 보이는 정보이므로 공개해도 된다.</summary>
-        public readonly NetworkVariable<ToolType> HeldTool = new(
-            ToolType.Camera,
+        /// <summary>빈 칸 표시. <see cref="ToolType"/>에 없는 값이어야 한다.</summary>
+        private const int Empty = -1;
+
+        private const int DefaultCapacity = 4;
+
+        /// <summary>
+        /// 칸별 도구 종류. 길이는 항상 칸 수와 같고, <see cref="Empty"/>면 빈 칸이다.
+        ///
+        /// <b><see cref="cooldowns"/>와 자리가 맞물려 있다</b> — 같은 인덱스가 그 도구의
+        /// 남은 쿨타임이다. 한쪽만 고치면 조용히 어긋난다.
+        /// </summary>
+        public readonly NetworkList<int> Slots = new(
+            new List<int> { Empty, Empty, Empty, Empty },
             NetworkVariableReadPermission.Everyone,
             NetworkVariableWritePermission.Server);
 
-        public readonly NetworkVariable<bool> HasTool = new(
-            false,
+        private readonly NetworkList<float> cooldowns = new(
+            new List<float> { 0f, 0f, 0f, 0f },
+            NetworkVariableReadPermission.Everyone,
+            NetworkVariableWritePermission.Server);
+
+        /// <summary>지금 고른 칸. 비어 있어도 고를 수 있다 — 그 상태가 맨손이다.</summary>
+        public readonly NetworkVariable<int> SelectedSlot = new(
+            0,
             NetworkVariableReadPermission.Everyone,
             NetworkVariableWritePermission.Server);
 
         /// <summary>탐지 결과가 본인에게 도착했을 때. (성공 여부, 사용한 도구)</summary>
         public event System.Action<bool, ToolType> OnDetectionResult;
 
-        /// <summary>도구를 들거나 놓았을 때. 반경 표시 갱신용.</summary>
+        /// <summary>소지 상태가 바뀌었을 때. HUD 갱신용.</summary>
         public event System.Action OnHeldToolChanged;
 
         private NetworkPlayer player;
 
         private GameConfig Config => GameManager.Config;
+
+        public int Capacity
+        {
+            get
+            {
+                var cfg = Config;
+                return cfg != null ? Mathf.Clamp(cfg.MaxCarriedTools, 1, 4) : DefaultCapacity;
+            }
+        }
+
+        // ── 바깥에서 읽는 상태 ─────────────────────────────────────
+
+        public bool HasToolAt(int slot) => slot >= 0 && slot < Slots.Count && Slots[slot] != Empty;
+
+        public ToolType TypeAt(int slot) => (ToolType)Slots[slot];
+
+        public float CooldownAt(int slot) => slot < cooldowns.Count ? cooldowns[slot] : 0f;
+
+        /// <summary>들고 있는 도구 개수. 빈 칸은 세지 않는다.</summary>
+        public int Count
+        {
+            get
+            {
+                int n = 0;
+                for (int i = 0; i < Slots.Count; i++)
+                {
+                    if (Slots[i] != Empty) n++;
+                }
+                return n;
+            }
+        }
+
+        public bool HasTool => Count > 0;
+
+        /// <summary>어느 칸이든 비어 있는가. 줍기 가능 여부가 아니라 "자리가 있는가"다.</summary>
+        public bool HasSpace
+        {
+            get
+            {
+                for (int i = 0; i < Slots.Count; i++)
+                {
+                    if (Slots[i] == Empty) return true;
+                }
+                return false;
+            }
+        }
+
+        /// <summary>지금 고른 칸이 비어 있는가. 줍기·회수는 이 상태에서만 된다.</summary>
+        public bool SelectedIsEmpty => !HasToolAt(SelectedSlot.Value);
+
+        /// <summary>지금 고른 칸의 도구. 빈 칸이면 false.</summary>
+        public bool TryGetSelected(out ToolType type, out float cooldown)
+        {
+            int i = SelectedSlot.Value;
+            if (!HasToolAt(i))
+            {
+                type = default;
+                cooldown = 0f;
+                return false;
+            }
+
+            type = (ToolType)Slots[i];
+            cooldown = CooldownAt(i);
+            return true;
+        }
 
         private void Awake()
         {
@@ -46,24 +139,78 @@ namespace GhostHunter.Exorcist
 
         public override void OnNetworkSpawn()
         {
-            HasTool.OnValueChanged += OnHasToolChanged;
-            HeldTool.OnValueChanged += (_, _) => OnHeldToolChanged?.Invoke();
-        }
+            Slots.OnListChanged += _ => OnHeldToolChanged?.Invoke();
+            SelectedSlot.OnValueChanged += (_, _) => OnHeldToolChanged?.Invoke();
 
-        public override void OnNetworkDespawn()
-        {
-            HasTool.OnValueChanged -= OnHasToolChanged;
-        }
-
-        private void OnHasToolChanged(bool had, bool has)
-        {
-            OnHeldToolChanged?.Invoke();
-
-            // 획득음은 <b>주운 본인에게만</b>. 남이 도구를 줍는 소리까지 들리면
-            // 그 위치가 그대로 드러난다.
-            if (IsOwner && !had && has)
+            if (IsServer)
             {
-                Audio.GameAudio.PlayCollectItem();
+                ServerResizeToCapacity();
+            }
+        }
+
+        /// <summary>설정의 칸 수에 맞춰 목록 길이를 고정한다. 서버 전용.</summary>
+        private void ServerResizeToCapacity()
+        {
+            int target = Capacity;
+
+            while (Slots.Count < target) { Slots.Add(Empty); cooldowns.Add(0f); }
+            while (Slots.Count > target)
+            {
+                Slots.RemoveAt(Slots.Count - 1);
+                cooldowns.RemoveAt(cooldowns.Count - 1);
+            }
+        }
+
+        private void Update()
+        {
+            if (IsServer)
+            {
+                TickCooldowns();
+            }
+
+            if (IsOwner)
+            {
+                ReadSlotKeys();
+            }
+        }
+
+        /// <summary>서버만 깎는다. 클라이언트가 각자 깎으면 서로 어긋난다.</summary>
+        private void TickCooldowns()
+        {
+            for (int i = 0; i < cooldowns.Count; i++)
+            {
+                if (Slots[i] != Empty && cooldowns[i] > 0f)
+                {
+                    cooldowns[i] = Mathf.Max(0f, cooldowns[i] - Time.deltaTime);
+                }
+            }
+        }
+
+        /// <summary>
+        /// 1~4번 키로 칸을 고른다. <b>빈 칸도 고를 수 있다.</b>
+        ///
+        /// <b>액션맵이 아니라 키보드를 직접 읽는다.</b> <c>.inputactions</c>를 고치면
+        /// 가상 플레이어(MPPM)를 재시작해야 반영되고, JSON을 손으로 편집하는 것도 위험하다.
+        /// 진영 검사는 여기서 따로 하므로 귀신에게 새어 들어갈 일은 없다.
+        /// </summary>
+        private void ReadSlotKeys()
+        {
+            var keyboard = Keyboard.current;
+            if (keyboard == null || player == null || !player.IsExorcist)
+            {
+                return;
+            }
+
+            var keys = new[] { keyboard.digit1Key, keyboard.digit2Key, keyboard.digit3Key, keyboard.digit4Key };
+            int limit = Mathf.Min(keys.Length, Slots.Count);
+
+            for (int i = 0; i < limit; i++)
+            {
+                if (keys[i] != null && keys[i].wasPressedThisFrame)
+                {
+                    SelectSlotRpc(i);
+                    return;
+                }
             }
         }
 
@@ -71,7 +218,8 @@ namespace GhostHunter.Exorcist
 
         public void OnUseTool(InputValue value)
         {
-            if (!IsOwner || !value.isPressed || !HasTool.Value)
+            // 빈 칸을 고르고 있으면 손에 든 게 없는 것이다.
+            if (!IsOwner || !value.isPressed || !TryGetSelected(out _, out _))
             {
                 return;
             }
@@ -80,22 +228,15 @@ namespace GhostHunter.Exorcist
             // 안 막으면 춤을 고르는 순간 들고 있던 도구까지 써버린다.
             //
             // <b>춤이 재생되는 동안도 막는다.</b> 그때는 카메라가 3인칭으로 뒤로 빠져
-            // 시야가 넓어지는데, 탐지가 화면 기준이 되면서 그게 그대로 이득이 됐다 —
-            // 춤을 켜고 도구를 쓰는 게 최적 전략이 되어버린다.
+            // 시야가 넓어지는데, 탐지가 화면 기준이 되면서 그게 그대로 이득이 됐다.
             var emote = GetComponent<PlayerEmote>();
             if (emote != null && (emote.WheelOpen || emote.IsEmoting))
             {
                 return;
             }
 
-            // 쓰는 동작은 즉시 보여준다. 결과(탐지 성공 여부)는 여전히 서버가 정한다 —
-            // 그건 이 게임의 비밀이라 절대 미리 판단하면 안 된다 (시나리오 3-2).
-            // 여기서 앞당기는 건 "썼다"는 동작뿐이다.
-            GetComponent<PlayerAnimation>()?.PlayPickup();
-
             // <b>시점은 클라이언트가 보내야 한다.</b> 상하 각도는 카메라 피벗에만 있고
-            // 네트워크로 동기화되지 않아서 서버는 알 방법이 없다. 좌표를 보내던 것과
-            // 같은 신뢰 수준이고, 어차피 귀신 위치를 모르니 각도를 속여도 이득이 없다.
+            // 네트워크로 동기화되지 않아서 서버는 알 방법이 없다.
             // <b>판정 자체는 여전히 서버가 한다.</b>
             var cam = GetComponentInChildren<Camera>(true);
             if (cam == null)
@@ -108,7 +249,7 @@ namespace GhostHunter.Exorcist
 
         public void OnDropTool(InputValue value)
         {
-            if (!IsOwner || !value.isPressed || !HasTool.Value)
+            if (!IsOwner || !value.isPressed || !TryGetSelected(out _, out _))
             {
                 return;
             }
@@ -116,20 +257,16 @@ namespace GhostHunter.Exorcist
             DropToolRpc();
         }
 
-        /// <summary>PlayerInteractor가 홀드를 완료했을 때 호출한다.</summary>
+        /// <summary>PlayerInteractor가 F 입력을 넘겨준다.</summary>
         public void RequestPickup(NetworkObject toolObject)
         {
-            if (!IsOwner || HasTool.Value || toolObject == null)
+            if (!IsOwner || !SelectedIsEmpty || toolObject == null)
             {
                 return;
             }
 
             // <b>모션은 서버를 기다리지 않고 즉시 재생한다.</b>
-            // Relay를 거치는 왕복(요청 → 판정 → 응답)이 끝나야 손을 뻗으면,
-            // 웹에서는 그 지연이 그대로 "F를 눌렀는데 반응이 없다"로 느껴진다.
-            //
-            // 모션은 연출일 뿐이라 서버가 거절해도 손해가 없다. 실제 획득 여부는
-            // 여전히 서버가 정하며(PickupRpc), 인벤토리 표시는 그 결과를 따른다.
+            // Relay 왕복이 끝나야 손을 뻗으면 "F를 눌렀는데 반응이 없다"로 느껴진다.
             GetComponent<PlayerAnimation>()?.PlayPickup();
 
             PickupRpc(new NetworkObjectReference(toolObject));
@@ -138,10 +275,19 @@ namespace GhostHunter.Exorcist
         // ── 서버 판정 ──────────────────────────────────────────────
 
         [Rpc(SendTo.Server)]
+        private void SelectSlotRpc(int slot)
+        {
+            if (slot >= 0 && slot < Slots.Count)
+            {
+                SelectedSlot.Value = slot;
+            }
+        }
+
+        [Rpc(SendTo.Server)]
         private void PickupRpc(NetworkObjectReference toolRef)
         {
             // 서버가 다시 검증한다. 클라이언트 말을 믿지 않는다.
-            if (HasTool.Value || !player.IsAlive.Value)
+            if (!SelectedIsEmpty || !player.IsAlive.Value)
             {
                 return;
             }
@@ -163,8 +309,8 @@ namespace GhostHunter.Exorcist
                 return;
             }
 
-            HeldTool.Value = tool.Type.Value;
-            HasTool.Value = true;
+            // 쿨타임을 그대로 물려받는다. 이게 "버렸다 주워도 유지"를 만든다.
+            ServerPutInSelected(tool.Type.Value, tool.Cooldown.Value);
             tool.ServerConsume();
 
             // 줍는 동작은 전원에게 보인다 — 남이 뭘 줍는지는 숨길 정보가 아니다.
@@ -174,35 +320,35 @@ namespace GhostHunter.Exorcist
         [Rpc(SendTo.Server)]
         private void DropToolRpc()
         {
-            if (!HasTool.Value)
+            if (!ServerTakeSelected(out var type, out float cooldown))
             {
                 return;
             }
 
             Vector3 dropPosition = transform.position + transform.forward * 1f + Vector3.up * 0.2f;
-            ToolSpawner.Instance?.ServerDropTool(HeldTool.Value, dropPosition, Quaternion.identity);
-
-            HasTool.Value = false;
+            var dropped = ToolSpawner.Instance?.ServerDropTool(type, dropPosition, Quaternion.identity);
+            if (dropped != null)
+            {
+                dropped.Cooldown.Value = cooldown;
+            }
         }
 
         [Rpc(SendTo.Server)]
         private void UseToolRpc(Vector3 eyePosition, Quaternion eyeRotation,
             float verticalFov, float aspect, RpcParams rpcParams = default)
         {
-            if (!HasTool.Value || !player.IsAlive.Value)
+            if (!player.IsAlive.Value || !TryGetSelected(out var toolType, out float cooldown))
             {
                 return;
             }
 
-            if (GameManager.CurrentPhase != GamePhase.Investigation)
+            if (GameManager.CurrentPhase != GamePhase.Investigation || cooldown > 0f)
             {
                 return;
             }
 
-            var toolType = HeldTool.Value;
-
-            // 사용하면 사라진다 (시나리오 3-1).
-            HasTool.Value = false;
+            // <b>도구는 사라지지 않는다.</b> 대신 손에 있는 것 전부가 쿨타임에 들어간다.
+            ServerStartCooldownOnAll();
 
             bool detected = DetectionJudge.Judge(
                 eyePosition, eyeRotation, verticalFov, aspect, toolType, Config);
@@ -210,14 +356,11 @@ namespace GhostHunter.Exorcist
             if (detected)
             {
                 // 페널티: 영혼 강제 복귀 + 도구 무효화 + 본체 이동 허용 (시나리오 3-5).
-                // <b>현실화 게이지는 건드리지 않는다</b> — 탐지의 대가는 게이지가 아니라
-                // 강제 복귀와 위치 노출이다 (시나리오 3-4).
                 var ghost = NetworkPlayer.GetGhost();
                 ghost?.GetComponent<GhostController>()?.ServerApplyDetectionPenalty();
 
-                // 탐지음은 귀신에게도 들린다. 이미 강제 복귀 페널티로 들킨 걸 아는
-                // 상황이라 <b>새로 새는 정보가 없다</b> — 실패했을 때 보내면 그때는
-                // "누군가 도구를 썼다"가 새므로, 성공한 경우에만 보낸다.
+                // 탐지음은 귀신에게도 들린다. 이미 강제 복귀로 들킨 걸 아는 상황이라
+                // 새로 새는 정보가 없다.
                 if (ghost != null)
                 {
                     GhostHeardDetectionRpc(RpcTarget.Single(ghost.OwnerClientId, RpcTargetUse.Temp));
@@ -235,8 +378,6 @@ namespace GhostHunter.Exorcist
         [Rpc(SendTo.SpecifiedInParams)]
         private void DetectionResultRpc(bool detected, ToolType tool, RpcParams rpcParams = default)
         {
-            // 성공·실패 소리를 여기서 낸다. 이 RPC 자체가 이미 본인에게만 가므로
-            // 추가로 대상을 가릴 필요가 없다.
             Audio.GameAudio.PlayDetection(detected);
             OnDetectionResult?.Invoke(detected, tool);
         }
@@ -253,7 +394,6 @@ namespace GhostHunter.Exorcist
         private void PickupAnimationRpc()
         {
             // 소유자는 이미 로컬에서 재생했다 (RequestPickup 참고).
-            // 여기서 또 틀면 손을 두 번 뻗는다.
             if (IsOwner)
             {
                 return;
@@ -262,15 +402,79 @@ namespace GhostHunter.Exorcist
             GetComponent<PlayerAnimation>()?.PlayPickup();
         }
 
-        /// <summary>제단 헌납처럼 서버가 직접 도구를 소모시킬 때 쓴다.</summary>
-        public void ServerConsumeHeldTool()
+        // ── 서버 전용 조작 ─────────────────────────────────────────
+
+        /// <summary>고른 칸에 도구를 넣는다. 제단에서 회수할 때도 이 경로를 쓴다.</summary>
+        public bool ServerPutInSelected(ToolType type, float cooldown)
+        {
+            if (!IsServer || !SelectedIsEmpty)
+            {
+                return false;
+            }
+
+            int slot = SelectedSlot.Value;
+            Slots[slot] = (int)type;
+            cooldowns[slot] = Mathf.Max(0f, cooldown);
+
+            OnHeldToolChanged?.Invoke();
+            return true;
+        }
+
+        /// <summary>고른 칸을 비운다. 제단에 넣거나 바닥에 버릴 때 쓴다.</summary>
+        public bool ServerTakeSelected(out ToolType type, out float cooldown)
+        {
+            type = default;
+            cooldown = 0f;
+
+            if (!IsServer || !TryGetSelected(out type, out cooldown))
+            {
+                return false;
+            }
+
+            int slot = SelectedSlot.Value;
+            Slots[slot] = Empty;
+            cooldowns[slot] = 0f;
+
+            OnHeldToolChanged?.Invoke();
+            return true;
+        }
+
+        /// <summary>
+        /// 들고 있는 <b>모든</b> 도구에 쿨타임을 건다.
+        ///
+        /// 하나만 걸면 4개를 쥔 사람이 번갈아 쓰며 탐지를 독점한다.
+        /// 나눠 들도록 유도하는 것이 이 규칙의 목적이다.
+        /// </summary>
+        private void ServerStartCooldownOnAll()
+        {
+            var cfg = Config;
+            float duration = cfg != null ? cfg.ToolCooldown : 20f;
+
+            for (int i = 0; i < Slots.Count; i++)
+            {
+                if (Slots[i] != Empty)
+                {
+                    cooldowns[i] = duration;
+                }
+            }
+        }
+
+        /// <summary>판이 끝날 때 서버가 손을 비운다.</summary>
+        public void ServerClearAll()
         {
             if (!IsServer)
             {
                 return;
             }
 
-            HasTool.Value = false;
+            for (int i = 0; i < Slots.Count; i++)
+            {
+                Slots[i] = Empty;
+                cooldowns[i] = 0f;
+            }
+
+            SelectedSlot.Value = 0;
+            OnHeldToolChanged?.Invoke();
         }
     }
 }

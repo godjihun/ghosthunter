@@ -709,7 +709,7 @@ namespace GhostHunter.Game
                 // 인벤토리는 플레이어에 붙어 있어서 그쪽으로는 닿지 않는다.
                 // 안 지우면 지난 판에 들고 있던 도구를 그대로 쥔 채 새 판이 시작되고,
                 // 그게 마침 약점이면 첫 판정을 공짜로 얻는다.
-                p.GetComponent<Exorcist.ExorcistInventory>()?.ServerConsumeHeldTool();
+                p.GetComponent<Exorcist.ExorcistInventory>()?.ServerClearAll();
             }
 
             serverWeakness = default;

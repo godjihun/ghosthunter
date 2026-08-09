@@ -224,7 +224,9 @@ namespace GhostHunter.Ghost
         [Rpc(SendTo.SpecifiedInParams)]
         private void AbsorbedRpc(RpcParams rpcParams = default)
         {
-            // TODO: 화면 효과 + 점프스케어 애니메이션 (기술 문서 6-2)
+            // 미리 렌더링해 둔 얼굴 프레임을 화면 가득 넘긴다.
+            // 이 RPC는 흡수당한 본인에게만 오므로 대상을 따로 가릴 필요가 없다.
+            UI.JumpScareOverlay.Play();
             Audio.GameAudio.PlayJumpScare();
             Debug.Log("[Exorcist] 영혼을 흡수당했다! (계속 플레이 가능)");
         }

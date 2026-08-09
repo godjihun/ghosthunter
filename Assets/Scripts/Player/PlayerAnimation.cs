@@ -68,10 +68,18 @@ namespace GhostHunter.Player
             ResolveAnimator();
         }
 
-        /// <summary>진영이 정해지면 켜진 모델이 달라지므로 그때마다 다시 찾는다.</summary>
+        /// <summary>
+        /// 지금 <b>켜져 있는</b> 모델의 Animator를 잡는다.
+        ///
+        /// ⚠️ <b>비활성 오브젝트를 포함하면 안 된다.</b> 프리팹에는 ExorcistModel과
+        /// GhostModel이 둘 다 들어 있고 형제 순서상 퇴마사가 앞이라,
+        /// <c>GetComponentInChildren&lt;Animator&gt;(true)</c>는 <b>귀신일 때도 꺼져 있는
+        /// 퇴마사의 Animator를 돌려준다.</b> 그러면 파라미터가 엉뚱한 쪽으로 들어가
+        /// 귀신은 정지 자세 그대로 미끄러져 다닌다 — 실제로 그 버그를 냈다.
+        /// </summary>
         public void ResolveAnimator()
         {
-            animator = GetComponentInChildren<Animator>(true);
+            animator = GetComponentInChildren<Animator>(false);
             CacheClipMetrics();
         }
 
@@ -121,7 +129,9 @@ namespace GhostHunter.Player
 
         private void Update()
         {
-            if (animator == null)
+            // 진영이 정해지면 켜진 모델이 바뀐다. <b>그 순간을 알려주는 곳이 없으므로</b>
+            // 들고 있던 Animator가 꺼졌는지 직접 확인해서 다시 잡는다.
+            if (animator == null || !animator.gameObject.activeInHierarchy)
             {
                 ResolveAnimator();
                 if (animator == null)
