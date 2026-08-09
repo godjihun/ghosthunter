@@ -16,7 +16,28 @@ namespace GhostHunter.Player
         [Tooltip("카메라에 붙은 스포트라이트. 시선을 따라간다. 퇴마사 전용.")]
         [SerializeField] private Light lanternLight;
 
-        [Header("── 귀신 암시(暗視) ──")]
+        [Header("── 게임 중: 퇴마사 ──")]
+
+        // 씬(Lighting → Environment) 값은 <b>로비·대기방</b>의 밝기다. 대기방이 저택과
+        // 같은 씬이라 씬을 어둡게 맞추면 사람이 모여 이야기하는 공간까지 캄캄해진다.
+        // 그래서 저택의 어둠은 씬이 아니라 여기서 정한다 — 게임이 시작되는 순간 덮어씌운다.
+
+        [Tooltip("퇴마사 화면의 하늘 방향 환경광. 위에서 오는 빛 — 바닥이 밝아진다.")]
+        [SerializeField] private Color exorcistAmbientSky = new(0.012f, 0.012f, 0.020f);
+
+        [Tooltip("퇴마사 화면의 수평 방향 환경광. 벽이 밝아진다 — 실내에서 체감이 가장 크다.")]
+        [SerializeField] private Color exorcistAmbientEquator = new(0.008f, 0.008f, 0.012f);
+
+        [Tooltip("퇴마사 화면의 아래 방향 환경광. 천장이 밝아진다.")]
+        [SerializeField] private Color exorcistAmbientGround = new(0.012f, 0.012f, 0.020f);
+
+        [Tooltip("퇴마사 화면의 안개 농도. 높일수록 랜턴 밖이 빨리 묻힌다.")]
+        [SerializeField] private float exorcistFogDensity = 0.100f;
+
+        [Tooltip("퇴마사 화면의 안개 색. 먼 곳이 결국 이 색으로 수렴한다 — 어두울수록 캄캄해진다.")]
+        [SerializeField] private Color exorcistFogColor = new(0.020f, 0.025f, 0.040f);
+
+        [Header("── 게임 중: 귀신 암시(暗視) ──")]
 
         // <b>배수가 아니라 절대값이다.</b> 예전에는 씬 값에 배수를 곱했는데,
         // 그러면 퇴마사 밝기를 올릴 때마다 귀신이 같이 밝아져 따로 맞출 수가 없었다.
@@ -34,14 +55,30 @@ namespace GhostHunter.Player
         [Tooltip("귀신 화면의 안개 농도. 낮출수록 멀리까지 보인다. 퇴마사 값과 무관하다.")]
         [SerializeField] private float ghostFogDensity = 0.010f;
 
+        [Tooltip("귀신 화면의 안개 색. 밝게 두면 먼 곳이 뿌옇게 뜨고, 어둡게 두면 어둠에 묻힌다.")]
+        [SerializeField] private Color ghostFogColor = new(0.060f, 0.075f, 0.110f);
+
+        /// <summary>화면 밝기를 결정하는 상태. 셋 중 하나만 적용된다.</summary>
+        private enum AmbientMode
+        {
+            /// <summary>대기방·결과 화면. 씬(Lighting → Environment)에 설정한 값 그대로.</summary>
+            Lobby,
+
+            /// <summary>게임 중 퇴마사. 위 인스펙터 값 + 랜턴.</summary>
+            Exorcist,
+
+            /// <summary>게임 중 귀신. 랜턴 없이 환경광만 올린다.</summary>
+            Ghost,
+        }
+
         private NetworkPlayer player;
 
         /// <summary>마지막으로 적용한 상태. 매 프레임 만지지 않기 위한 캐시.</summary>
         private bool? lanternApplied;
-        private bool? visionApplied;
+        private AmbientMode? ambientApplied;
 
-        // 되돌리기 위한 원래 값. 진영이 정해지기 전에 잡아둔다.
-        private Color baseSky, baseEquator, baseGround;
+        // 씬에 설정된 원래 값 = 로비·대기방의 밝기. 처음 만지기 직전에 잡는다.
+        private Color baseSky, baseEquator, baseGround, baseFogColor;
         private float baseFogDensity;
         private bool baseCaptured;
 
@@ -53,13 +90,12 @@ namespace GhostHunter.Player
         public override void OnNetworkSpawn()
         {
             ApplyLantern(false);
-            ApplyVision(false);
         }
 
         public override void OnNetworkDespawn()
         {
-            // 나가면서 밝기를 되돌려놓지 않으면 다음 판까지 밝은 채로 남는다.
-            ApplyVision(false);
+            // 나가면서 씬 값으로 되돌려놓지 않으면 진영 밝기가 다음 판까지 남는다.
+            ApplyAmbient(AmbientMode.Lobby);
         }
 
         /// <summary>
@@ -89,26 +125,32 @@ namespace GhostHunter.Player
         }
 
         /// <summary>
-        /// 귀신 암시를 켤 것인가.
+        /// 지금 화면이 어떤 밝기여야 하는가.
         ///
-        /// <b>반드시 소유자에게만.</b> <see cref="RenderSettings"/>는 그 클라이언트의
-        /// 렌더링 설정이라 소유자 화면만 밝아지고 남에게는 영향이 없다.
-        /// 서버가 이걸 대신 만지면 <b>호스트 화면이 같이 밝아져</b> 의미가 없어진다.
+        /// <b>대기방은 저택과 같은 씬</b>이라 씬 환경광을 그대로 쓴다 — 사람이 모여
+        /// 이야기하는 공간이므로 씬은 밝게 맞춰둔다. 저택의 어둠은 씬이 아니라
+        /// 인스펙터 값이고, 게임이 시작되는 순간 진영에 따라 덮어씌운다.
         /// </summary>
-        private bool ShouldVisionBeOn()
+        private AmbientMode CurrentMode()
         {
-            if (!IsOwner || player == null || !player.IsGhost)
+            if (!GameManager.IsGameplayActive)
             {
-                return false;
+                return AmbientMode.Lobby;
             }
 
-            return GameManager.IsGameplayActive;
+            return player != null && player.IsGhost ? AmbientMode.Ghost : AmbientMode.Exorcist;
         }
 
         private void LateUpdate()
         {
             ApplyLantern(ShouldLanternBeOn());
-            ApplyVision(ShouldVisionBeOn());
+
+            // <b>반드시 소유자만.</b> RenderSettings는 그 클라이언트의 전역 설정이라,
+            // 내 화면에 있는 남의 캐릭터까지 손대게 두면 서로 값을 덮어쓴다.
+            if (IsOwner)
+            {
+                ApplyAmbient(CurrentMode());
+            }
         }
 
         private void ApplyLantern(bool on)
@@ -129,31 +171,56 @@ namespace GhostHunter.Player
         /// 도움이 안 되고, URP의 추가 조명 한도(오브젝트당 4개)도 잡아먹는다.
         /// 환경광은 추가 패스도 조명 슬롯도 쓰지 않아 WebGL에서 사실상 공짜다.
         /// </summary>
-        private void ApplyVision(bool on)
+        private void ApplyAmbient(AmbientMode mode)
         {
-            if (!OwnsRenderSettings || visionApplied == on)
+            if (!OwnsRenderSettings || ambientApplied == mode)
             {
                 return;
             }
 
-            // 원래 값은 처음 손대기 직전에 잡는다. Awake에서 잡으면
+            // 씬 값은 처음 손대기 직전에 잡는다. Awake에서 잡으면
             // 씬 조명 설정이 아직 적용되기 전일 수 있다.
+            //
+            // 이 값이 곧 <b>로비·대기방의 밝기</b>다. 대기방을 조절할 때는
+            // Lighting → Environment를 만지면 되고, 저택 안의 두 진영은 인스펙터 값이다.
             if (!baseCaptured)
             {
                 baseSky = RenderSettings.ambientSkyColor;
                 baseEquator = RenderSettings.ambientEquatorColor;
                 baseGround = RenderSettings.ambientGroundColor;
                 baseFogDensity = RenderSettings.fogDensity;
+                baseFogColor = RenderSettings.fogColor;
                 baseCaptured = true;
             }
 
-            visionApplied = on;
+            ambientApplied = mode;
 
-            // 켤 때는 귀신 전용 절대값, 끌 때는 씬에서 잡아둔 원래 값으로 되돌린다.
-            RenderSettings.ambientSkyColor = on ? ghostAmbientSky : baseSky;
-            RenderSettings.ambientEquatorColor = on ? ghostAmbientEquator : baseEquator;
-            RenderSettings.ambientGroundColor = on ? ghostAmbientGround : baseGround;
-            RenderSettings.fogDensity = on ? Mathf.Max(0f, ghostFogDensity) : baseFogDensity;
+            switch (mode)
+            {
+                case AmbientMode.Exorcist:
+                    RenderSettings.ambientSkyColor = exorcistAmbientSky;
+                    RenderSettings.ambientEquatorColor = exorcistAmbientEquator;
+                    RenderSettings.ambientGroundColor = exorcistAmbientGround;
+                    RenderSettings.fogDensity = Mathf.Max(0f, exorcistFogDensity);
+                    RenderSettings.fogColor = exorcistFogColor;
+                    break;
+
+                case AmbientMode.Ghost:
+                    RenderSettings.ambientSkyColor = ghostAmbientSky;
+                    RenderSettings.ambientEquatorColor = ghostAmbientEquator;
+                    RenderSettings.ambientGroundColor = ghostAmbientGround;
+                    RenderSettings.fogDensity = Mathf.Max(0f, ghostFogDensity);
+                    RenderSettings.fogColor = ghostFogColor;
+                    break;
+
+                default: // Lobby — 씬에 설정한 그대로
+                    RenderSettings.ambientSkyColor = baseSky;
+                    RenderSettings.ambientEquatorColor = baseEquator;
+                    RenderSettings.ambientGroundColor = baseGround;
+                    RenderSettings.fogDensity = baseFogDensity;
+                    RenderSettings.fogColor = baseFogColor;
+                    break;
+            }
         }
     }
 }
