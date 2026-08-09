@@ -58,10 +58,24 @@ namespace GhostHunter.Game
         }
 
         /// <summary>
+        /// 지금 은신이 <b>재은신</b>인가. 판 시작의 첫 은신과 구분한다.
+        ///
+        /// 약점이 하나라도 밝혀졌다면 그 뒤의 은신은 전부 재은신이다.
+        /// </summary>
+        public static bool IsRehiding =>
+            CurrentPhase == GamePhase.Hiding && Instance != null && Instance.FoundWeaknesses.Count > 0;
+
+        /// <summary>
         /// 퇴마사가 움직이고 도구를 다룰 수 있는가 (시나리오 4번 [3]).
         ///
-        /// <b>은신 단계에는 퇴마사가 대기지점에 묶여 있어야 한다.</b> 미리 돌아다니며
-        /// 도구를 주워두면 귀신이 숨을 시간을 준다는 의미 자체가 사라진다.
+        /// <b>첫 은신에만 대기지점에 묶인다.</b> 미리 돌아다니며 도구를 주워두면
+        /// 귀신이 숨을 시간을 준다는 의미 자체가 사라지기 때문이다.
+        ///
+        /// <b>재은신은 다르다.</b> 그때는 이미 조사가 한창인 중이라 퇴마사를 그 자리에
+        /// 얼려두면 판이 멈춘다. 귀신에게 주는 유예는 "퇴마사 정지"가 아니라
+        /// <b>도구 무효화</b>(<see cref="Ghost.GhostController.IsToolNullified"/>)와
+        /// 탐지가 조사 단계에서만 통한다는 규칙으로 이미 보장된다.
+        ///
         /// 이동·상호작용·줍기가 각자 판단하면 한 군데씩 빠뜨리므로 여기로 모은다.
         /// </summary>
         public static bool ExorcistsCanAct
@@ -69,7 +83,7 @@ namespace GhostHunter.Game
             get
             {
                 var phase = CurrentPhase;
-                return phase == GamePhase.Investigation || phase == GamePhase.Hunt;
+                return phase == GamePhase.Investigation || phase == GamePhase.Hunt || IsRehiding;
             }
         }
 
@@ -108,6 +122,21 @@ namespace GhostHunter.Game
         /// <summary>결과 화면에서 공개되는 약점. 게임이 끝나기 전에는 비어 있다.</summary>
         public readonly NetworkVariable<WeaknessSet> RevealedWeakness = new(
             default,
+            NetworkVariableReadPermission.Everyone,
+            NetworkVariableWritePermission.Server);
+
+        /// <summary>
+        /// 탐지에 성공해 이미 밝혀진 약점 도구들 (<see cref="ToolType"/>을 int로).
+        ///
+        /// <b>전원에게 공개한다.</b> 탐지에 성공하면 어떤 도구였는지 모두가 알아야
+        /// 팀이 남은 후보를 좁혀 나갈 수 있고, 귀신도 자기 약점이 몇 개 뚫렸는지 알아야
+        /// 사냥으로 밀지 조사를 더 흘릴지 판단할 수 있다.
+        ///
+        /// <b>여기 든 도구로는 다시 탐지할 수 없다.</b> 같은 도구로 반복해서 성공하면
+        /// 재은신 사이클이 무한히 돌아 게임이 끝나지 않는다.
+        /// </summary>
+        public readonly NetworkList<int> FoundWeaknesses = new(
+            new System.Collections.Generic.List<int>(),
             NetworkVariableReadPermission.Everyone,
             NetworkVariableWritePermission.Server);
 
@@ -273,6 +302,7 @@ namespace GhostHunter.Game
 
             Result.Value = GameResult.None;
             RevealedWeakness.Value = default;
+            FoundWeaknesses.Clear();
             EnterPhase(GamePhase.Hiding);
         }
 
@@ -463,6 +493,15 @@ namespace GhostHunter.Game
 
             switch (phase)
             {
+                case GamePhase.Hiding:
+                    // 귀신이 자리를 옮겨야 하므로 본체 이동 잠금을 푼다.
+                    //
+                    // <b>영혼 복귀는 여기서 하지 않는다.</b> 탐지 페널티
+                    // (<see cref="Ghost.GhostController.ServerApplyDetectionPenalty"/>)가
+                    // 이미 소유자에게 복귀를 시켰다 — 여기서 또 옮기면 두 번 순간이동한다.
+                    LockGhostBody(false);
+                    break;
+
                 case GamePhase.Investigation:
                     // 은신 종료 → 귀신 본체 고정 (시나리오 4번 [3])
                     LockGhostBody(true);
@@ -486,6 +525,56 @@ namespace GhostHunter.Game
                     RevealedWeakness.Value = serverWeakness;
                     break;
             }
+        }
+
+        /// <summary>이 도구로는 이미 탐지에 성공했는가. 같은 도구를 두 번 쓰지 못하게 막는다.</summary>
+        public bool IsWeaknessFound(ToolType tool)
+        {
+            foreach (int raw in FoundWeaknesses)
+            {
+                if ((ToolType)raw == tool)
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// 탐지에 성공했다. 서버 전용 — <see cref="Exorcist.ExorcistInventory"/>가 부른다.
+        ///
+        /// <b>사이클의 심장이다.</b> 약점 하나가 밝혀질 때마다 판이 은신으로 되감기고,
+        /// 조사 시간은 <b>가득 채워져</b> 다시 시작한다(<see cref="EnterPhase"/>의
+        /// <see cref="DurationOf"/>). 남은 시간이 얼마였든 상관없다 —
+        /// "찾아내면 시간을 번다"가 퇴마사 쪽의 유일한 시간 자원이기 때문이다.
+        ///
+        /// 세 번째로 찾아내면 은신으로 돌아가지 않고 그대로 끝난다.
+        /// </summary>
+        public void ServerOnWeaknessFound(ToolType tool)
+        {
+            if (!IsServer || Phase.Value != GamePhase.Investigation || IsWeaknessFound(tool))
+            {
+                return;
+            }
+
+            FoundWeaknesses.Add((int)tool);
+            Debug.Log($"[GameManager] 약점 발견: {tool} ({FoundWeaknesses.Count}/{config.WeaknessCount})");
+
+            if (FoundWeaknesses.Count >= config.WeaknessCount)
+            {
+                // 약점 3종을 모두 밝혀냈다 — 제단을 거치지 않아도 퇴마 성공이다.
+                EndGame(GameResult.ExorcistWin);
+                return;
+            }
+
+            // 아직 남았다 → 재은신.
+            //
+            // <b>페널티를 먼저 건다.</b> 영혼 강제 복귀 + 도구 무효화 + 본체 이동 허용까지가
+            // 예전부터 있던 탐지 페널티 그대로다 (시나리오 3-5). 달라진 건 그 유예가
+            // 조사 시간을 갉아먹는 대신 <b>별도 단계</b>로 떨어져 나왔다는 것뿐이다.
+            // 퇴마사는 그 동안에도 계속 움직인다 — 도구만 듣지 않는다.
+            NetworkPlayer.GetGhost()?.GetComponent<Ghost.GhostController>()?.ServerApplyDetectionPenalty();
+            EnterPhase(GamePhase.Hiding);
         }
 
         private float DurationOf(GamePhase phase) => phase switch
@@ -709,11 +798,12 @@ namespace GhostHunter.Game
                 // 인벤토리는 플레이어에 붙어 있어서 그쪽으로는 닿지 않는다.
                 // 안 지우면 지난 판에 들고 있던 도구를 그대로 쥔 채 새 판이 시작되고,
                 // 그게 마침 약점이면 첫 판정을 공짜로 얻는다.
-                p.GetComponent<Exorcist.ExorcistInventory>()?.ServerConsumeHeldTool();
+                p.GetComponent<Exorcist.ExorcistInventory>()?.ServerClearAll();
             }
 
             serverWeakness = default;
             RevealedWeakness.Value = default;
+            FoundWeaknesses.Clear();
             Result.Value = GameResult.None;
             MaterializeGauge.Value = 0f;
 

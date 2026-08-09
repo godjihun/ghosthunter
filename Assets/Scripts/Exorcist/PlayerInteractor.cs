@@ -37,6 +37,18 @@ namespace GhostHunter.Exorcist
         /// <summary>지금 조준 중인 대상. 프롬프트 표시에 쓴다.</summary>
         public IInteractable Target { get; private set; }
 
+        /// <summary>
+        /// 아직 살아 있는 대상인가.
+        ///
+        /// ⚠️ <b>인터페이스 변수에 <c>== null</c>을 쓰면 안 된다.</b> 유니티가 오버로드한
+        /// <c>==</c>는 <see cref="Object"/> 타입에서만 동작하는데, <see cref="IInteractable"/>로
+        /// 받으면 그냥 참조 비교라 <b>이미 파괴된 오브젝트가 null이 아닌 것으로 통과한다.</b>
+        /// 도구를 줍는 순간 서버가 그 오브젝트를 디스폰하므로 바로 이 상황이 생긴다 —
+        /// 실제로 <c>MissingReferenceException</c>이 났다.
+        /// </summary>
+        public static bool IsAlive(IInteractable target)
+            => target is Object obj && obj != null;
+
         private void Awake()
         {
             player = GetComponent<NetworkPlayer>();
@@ -81,7 +93,7 @@ namespace GhostHunter.Exorcist
             // 남겨두면 나중에 엉뚱한 대상 앞에서 저절로 발동한다.
             interactQueued = false;
 
-            if (Target != null && Target.CanInteract(player))
+            if (IsAlive(Target) && Target.CanInteract(player))
             {
                 Execute(Target);
             }
@@ -124,7 +136,7 @@ namespace GhostHunter.Exorcist
                     out var hit, interactRange, interactMask, QueryTriggerInteraction.Collide))
             {
                 var aimed = hit.collider.GetComponentInParent<IInteractable>();
-                if (aimed != null && ShouldShow(aimed))
+                if (IsAlive(aimed) && ShouldShow(aimed))
                 {
                     return aimed;
                 }
@@ -139,7 +151,7 @@ namespace GhostHunter.Exorcist
             foreach (var col in hits)
             {
                 var candidate = col.GetComponentInParent<IInteractable>();
-                if (candidate == null || !ShouldShow(candidate))
+                if (!IsAlive(candidate) || !ShouldShow(candidate))
                 {
                     continue;
                 }
