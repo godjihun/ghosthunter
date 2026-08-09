@@ -182,11 +182,29 @@ namespace GhostHunter.Game
 
             Settings.OnValueChanged += OnSettingsChanged;
             ApplySettings(Settings.Value);
+
+            Phase.OnValueChanged += OnPhaseChangedForAudio;
+        }
+
+        /// <summary>
+        /// 단계 시작 경보음. <b>RPC를 쓰지 않는다</b> — 단계는 이미 전원에게 동기화되므로
+        /// 각자 자기 쪽 변화를 보고 재생하면 그것으로 전원이 듣는다.
+        ///
+        /// 접속 도중에 들어온 사람에게는 울리지 않는다. NetworkVariable의 변경 콜백은
+        /// <b>값이 바뀔 때만</b> 오고 최초 수신 때는 오지 않기 때문이다 — 마침 원하는 동작이다.
+        /// </summary>
+        private void OnPhaseChangedForAudio(GamePhase previous, GamePhase current)
+        {
+            if (current is GamePhase.Investigation or GamePhase.Hunt)
+            {
+                Audio.GameAudio.PlayStageAlarm();
+            }
         }
 
         public override void OnNetworkDespawn()
         {
             Settings.OnValueChanged -= OnSettingsChanged;
+            Phase.OnValueChanged -= OnPhaseChangedForAudio;
         }
 
         private void OnSettingsChanged(LobbySettings previous, LobbySettings current)
@@ -686,6 +704,12 @@ namespace GhostHunter.Game
                 p.Faction.Value = Faction.Unassigned;
                 p.IsAlive.Value = true;
                 p.Weakness.Value = default;
+
+                // <b>손에 든 도구도 지운다.</b> 바닥의 도구는 DespawnAll이 치우지만
+                // 인벤토리는 플레이어에 붙어 있어서 그쪽으로는 닿지 않는다.
+                // 안 지우면 지난 판에 들고 있던 도구를 그대로 쥔 채 새 판이 시작되고,
+                // 그게 마침 약점이면 첫 판정을 공짜로 얻는다.
+                p.GetComponent<Exorcist.ExorcistInventory>()?.ServerConsumeHeldTool();
             }
 
             serverWeakness = default;

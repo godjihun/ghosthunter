@@ -1,0 +1,32 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 58fca373972f24843a83b2cf7d6b4020, type: 3}
+  m_Name: AudioLibrary
+  m_EditorClassIdentifier:
+  AltarOffer: {fileID: 8300000, guid: cfd8894e60fd9ed478b1fdf69953ed0a, type: 3}
+  StageAlarm: {fileID: 8300000, guid: f97f61f0fc25a6c418e3b7c034d71cc0, type: 3}
+  KillSound: {fileID: 8300000, guid: 0e3b958a368fe2443af780312c932cae, type: 3}
+  Jump: {fileID: 8300000, guid: d507f6584689ccd458ce31ad66daed74, type: 3}
+  Ambient: {fileID: 8300000, guid: 9d9b2f3d7fb596b499733410e1c1cfa9, type: 3}
+  CollectItem: {fileID: 8300000, guid: 886d71668c2f61542a92c6973ab3a144, type: 3}
+  DetectFail: {fileID: 8300000, guid: 2d2d127830d41e54bbc220df67ea3ac1, type: 3}
+  DetectSuccess: {fileID: 8300000, guid: 0ba7bc05f08253343ada21af58c7294a, type: 3}
+  JumpScare: {fileID: 8300000, guid: e71159856354bb54391fabd40dde231a, type: 3}
+  DoorOpening: {fileID: 8300000, guid: 7500fb8588016b2489e7384f99666bcf, type: 3}
+  DoorClosed: {fileID: 8300000, guid: 7209182efc51ff14bb84d2dbe6e61a34, type: 3}
+  Walking: {fileID: 8300000, guid: 0863709d44b9c554f9ed69f38f012e54, type: 3}
+  Running: {fileID: 8300000, guid: 2cc14ee01fce63644a0b4f895a949d85, type: 3}
+  SfxVolume: 1
+  AmbientVolume: 0.35
+  FootstepVolume: 0.6
+  DoorHearingRange: 18
+  FootstepHearingRange: 14

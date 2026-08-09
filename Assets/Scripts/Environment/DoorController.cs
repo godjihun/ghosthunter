@@ -26,6 +26,9 @@ namespace GhostHunter.Environment
         private Quaternion openRotation;
         private bool isOpen;
 
+        /// <summary>서버 값을 한 번이라도 받았는가. 첫 반영은 소리를 내지 않는다.</summary>
+        private bool stateKnown;
+
         public int DoorIndex => doorIndex;
         public bool IsOpen => isOpen;
 
@@ -46,9 +49,28 @@ namespace GhostHunter.Environment
             openRotation = Quaternion.AngleAxis(openAngle, axis.normalized) * closedRotation;
         }
 
-        public void SetOpen(bool value)
+        /// <summary>
+        /// 열림 상태를 반영한다.
+        ///
+        /// <paramref name="silent"/>는 <b>일괄 동기화</b>용이다. 접속 직후나 새 판 시작 때
+        /// 문 27개의 상태가 한꺼번에 들어오는데, 그때 소리를 내면 저택 전체에서
+        /// 문 여닫는 소리가 동시에 터진다.
+        /// </summary>
+        public void SetOpen(bool value, bool silent = false)
         {
+            // 상태가 실제로 바뀔 때만 소리를 낸다. DoorManager는 값이 갱신될 때마다
+            // 문 전체에 다시 뿌리므로, 여기서 거르지 않으면 남이 연 문 때문에
+            // 내 옆의 안 움직인 문에서도 소리가 난다.
+            bool changed = value != isOpen;
             isOpen = value;
+
+            if (!changed || silent || !stateKnown)
+            {
+                stateKnown = true;
+                return;
+            }
+
+            Audio.GameAudio.PlayDoor(value, transform.position);
         }
 
         private void Update()

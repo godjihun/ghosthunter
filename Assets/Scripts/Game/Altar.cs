@@ -36,6 +36,31 @@ namespace GhostHunter.Game
             Instance = this;
         }
 
+        public override void OnNetworkSpawn()
+        {
+            OfferedTools.OnListChanged += OnOfferedChanged;
+        }
+
+        public override void OnNetworkDespawn()
+        {
+            OfferedTools.OnListChanged -= OnOfferedChanged;
+        }
+
+        /// <summary>
+        /// 헌납 소리. <b>RPC를 따로 보내지 않는다</b> — 목록이 이미 전원에게 동기화되므로
+        /// 각자 자기 쪽 변화를 보고 재생하면 그것으로 전원이 듣는다.
+        ///
+        /// 판정 실패로 목록을 비울 때(<see cref="ServerClear"/>)도 이 콜백이 오므로
+        /// <b>추가된 경우만</b> 걸러낸다.
+        /// </summary>
+        private void OnOfferedChanged(NetworkListEvent<int> change)
+        {
+            if (change.Type == NetworkListEvent<int>.EventType.Add)
+            {
+                Audio.GameAudio.PlayAltarOffer();
+            }
+        }
+
         public override void OnDestroy()
         {
             if (Instance == this)

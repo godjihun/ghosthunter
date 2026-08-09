@@ -201,6 +201,20 @@ namespace GhostHunter.Player
         [Rpc(SendTo.Everyone)]
         private void JumpRpc()
         {
+            // 점프 소리는 <b>애니메이터보다 먼저</b> 낸다. 아래에서 animator가 null이면
+            // 그냥 돌아가버리므로, 뒤에 두면 모델이 아직 안 잡힌 순간에 소리가 통째로 빠진다.
+            //
+            // 귀신은 소리를 내지 않는다 — 발소리를 막은 것과 같은 이유다.
+            // 렌더러를 꺼서 숨겨놓고 점프 소리로 위치가 새면 의미가 없다.
+            // 발소리는 진영과 무관하게 멈춘다. 공중에 떠 있는데 발소리가 나면
+            // 안 되고, 귀신은 애초에 발소리를 안 내므로 호출해도 손해가 없다.
+            GetComponent<Audio.PlayerFootsteps>()?.NotifyJump();
+
+            if (player != null && player.IsExorcist)
+            {
+                Audio.GameAudio.PlayJump(transform.position);
+            }
+
             if (animator == null)
             {
                 return;
