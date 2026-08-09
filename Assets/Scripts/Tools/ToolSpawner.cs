@@ -9,8 +9,10 @@ namespace GhostHunter.Tools
     /// 게임 시작 시 서버가 맵에 도구를 뿌린다 (기술 문서 5-1).
     ///
     /// 배치는 비밀이 아니다 — 찾으면 되는 것이므로 그냥 서버가 스폰하면 전원에게 보인다.
-    /// 단 <b>종류당 개수는 반드시 균등</b>해야 한다. 어떤 도구가 유난히 많으면
-    /// "이게 약점인가?" 하는 엉뚱한 추론이 생겨 추리 구조가 오염된다.
+    ///
+    /// <b>종류당 정확히 한 개씩, 총 6개다.</b> 도구가 소모품이던 시절에는 종류당 여러 개를
+    /// 뿌렸지만, 지금은 쓰면 쿨타임이 도는 재사용 도구라 하나면 충분하다.
+    /// 여러 개가 있으면 같은 도구를 겹쳐 들고 쿨타임 규칙을 우회할 수 있다.
     /// </summary>
     public class ToolSpawner : NetworkBehaviour
     {
@@ -58,14 +60,13 @@ namespace GhostHunter.Tools
                 return;
             }
 
-            // 종류당 균등하게 목록을 만든 뒤 섞는다.
+            // <b>종류당 정확히 하나씩.</b> 도구는 소모품이 아니라 쿨타임이 도는
+            // 재사용 도구라, 저택 전체에 6개만 존재한다. 여러 개를 뿌리면
+            // 한 사람이 같은 도구를 여러 개 쥐고 쿨타임 규칙을 우회하게 된다.
             var toPlace = new List<ToolType>();
             for (int t = 0; t < ToolTypeExtensions.Count; t++)
             {
-                for (int n = 0; n < config.ToolsPerType; n++)
-                {
-                    toPlace.Add((ToolType)t);
-                }
+                toPlace.Add((ToolType)t);
             }
 
             var points = UsablePoints();
@@ -75,8 +76,7 @@ namespace GhostHunter.Tools
             int count = Mathf.Min(toPlace.Count, points.Count);
             if (toPlace.Count > points.Count)
             {
-                Debug.LogWarning($"[ToolSpawner] 스폰 지점이 {points.Count}개뿐이라 도구 {toPlace.Count}개를 다 놓을 수 없습니다. " +
-                                 "지점을 더 배치하세요 — 종류별 개수가 불균등해지면 추리가 오염됩니다.");
+                Debug.LogWarning($"[ToolSpawner] 스폰 지점이 {points.Count}개뿐이라 도구 {toPlace.Count}개를 다 놓을 수 없습니다.");
             }
 
             for (int i = 0; i < count; i++)

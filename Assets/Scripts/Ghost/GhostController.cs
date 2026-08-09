@@ -255,6 +255,15 @@ namespace GhostHunter.Ghost
                 return;
             }
 
+            // <b>귀신이 아니게 되면 손을 뗀다.</b> 이 컴포넌트는 진영이 바뀌어도 같은
+            // 오브젝트에 남아 계속 Update가 돈다(비활성화는 스폰 때 한 번뿐이다).
+            // 판이 끝나 진영이 풀린 뒤에도 잠금을 계속 쓰면 <b>대기방에서 움직일 수 없다.</b>
+            if (player != null && !player.IsGhost)
+            {
+                movement.MovementLocked = false;
+                return;
+            }
+
             // 영혼이 나가 있으면 이동 가능. 본체 상태에서는 잠금 여부를 따른다.
             movement.MovementLocked = BodyLocked.Value && !IsSoulOut.Value;
         }

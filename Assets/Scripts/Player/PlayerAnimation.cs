@@ -68,10 +68,18 @@ namespace GhostHunter.Player
             ResolveAnimator();
         }
 
-        /// <summary>진영이 정해지면 켜진 모델이 달라지므로 그때마다 다시 찾는다.</summary>
+        /// <summary>
+        /// 지금 <b>켜져 있는</b> 모델의 Animator를 잡는다.
+        ///
+        /// ⚠️ <b>비활성 오브젝트를 포함하면 안 된다.</b> 프리팹에는 ExorcistModel과
+        /// GhostModel이 둘 다 들어 있고 형제 순서상 퇴마사가 앞이라,
+        /// <c>GetComponentInChildren&lt;Animator&gt;(true)</c>는 <b>귀신일 때도 꺼져 있는
+        /// 퇴마사의 Animator를 돌려준다.</b> 그러면 파라미터가 엉뚱한 쪽으로 들어가
+        /// 귀신은 정지 자세 그대로 미끄러져 다닌다 — 실제로 그 버그를 냈다.
+        /// </summary>
         public void ResolveAnimator()
         {
-            animator = GetComponentInChildren<Animator>(true);
+            animator = GetComponentInChildren<Animator>(false);
             CacheClipMetrics();
         }
 
@@ -121,7 +129,9 @@ namespace GhostHunter.Player
 
         private void Update()
         {
-            if (animator == null)
+            // 진영이 정해지면 켜진 모델이 바뀐다. <b>그 순간을 알려주는 곳이 없으므로</b>
+            // 들고 있던 Animator가 꺼졌는지 직접 확인해서 다시 잡는다.
+            if (animator == null || !animator.gameObject.activeInHierarchy)
             {
                 ResolveAnimator();
                 if (animator == null)
@@ -201,6 +211,20 @@ namespace GhostHunter.Player
         [Rpc(SendTo.Everyone)]
         private void JumpRpc()
         {
+            // 점프 소리는 <b>애니메이터보다 먼저</b> 낸다. 아래에서 animator가 null이면
+            // 그냥 돌아가버리므로, 뒤에 두면 모델이 아직 안 잡힌 순간에 소리가 통째로 빠진다.
+            //
+            // 귀신은 소리를 내지 않는다 — 발소리를 막은 것과 같은 이유다.
+            // 렌더러를 꺼서 숨겨놓고 점프 소리로 위치가 새면 의미가 없다.
+            // 발소리는 진영과 무관하게 멈춘다. 공중에 떠 있는데 발소리가 나면
+            // 안 되고, 귀신은 애초에 발소리를 안 내므로 호출해도 손해가 없다.
+            GetComponent<Audio.PlayerFootsteps>()?.NotifyJump();
+
+            if (player != null && player.IsExorcist)
+            {
+                Audio.GameAudio.PlayJump(transform.position);
+            }
+
             if (animator == null)
             {
                 return;

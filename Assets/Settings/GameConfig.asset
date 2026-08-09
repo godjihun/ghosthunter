@@ -30,7 +30,9 @@ MonoBehaviour:
   HuntKillCooldown: 3
   WeaknessCount: 3
   AltarCapacity: 3
-  TotalToolCount: 30
+  TotalToolCount: 60
+  ToolCooldown: 20
+  MaxCarriedTools: 4
   MaxPlayers: 5
   DetectionFeedbackDuration: 1.5
   SpectatorCameraDistance: 2.5

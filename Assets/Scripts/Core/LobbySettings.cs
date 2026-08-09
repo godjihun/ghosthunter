@@ -24,13 +24,12 @@ namespace GhostHunter.Core
         public float AbsorbGaugePerHit;
 
         /// <summary>
-        /// 맵에 뿌릴 도구 총 개수. <b>반드시 도구 종류 수(6)의 배수여야 한다.</b>
+        /// 도구 사용 후 쿨타임(초).
         ///
-        /// 종류당 개수는 <c>총개수 ÷ 6</c>을 <b>내림</b>해서 구한다. 6의 배수가 아니면
-        /// 나머지가 그냥 사라진다 — 20을 넣으면 18개만 나온다. 그래서 슬라이더가
-        /// 6칸씩 움직이게 해두었다(<see cref="Fields"/>의 Step).
+        /// 도구는 이제 소모품이 아니라 <b>쿨타임이 도는 재사용 도구</b>다. 종류당 1개뿐이라
+        /// 이 값이 곧 "저택 전체에서 그 도구를 얼마나 자주 쓸 수 있는가"가 된다.
         /// </summary>
-        public float TotalToolCount;
+        public float ToolCooldown;
 
         /// <summary>사냥 단계 지속 시간(초).</summary>
         public float HuntDuration;
@@ -45,7 +44,7 @@ namespace GhostHunter.Core
                 ToolNullifyDuration = config.ToolNullifyDuration,
                 DetectionRange = config.DetectionRange,
                 AbsorbGaugePerHit = config.AbsorbGaugePerHit,
-                TotalToolCount = config.TotalToolCount,
+                ToolCooldown = config.ToolCooldown,
                 HuntDuration = config.HuntDuration,
             };
         }
@@ -59,15 +58,14 @@ namespace GhostHunter.Core
             config.ToolNullifyDuration = ToolNullifyDuration;
             config.DetectionRange = DetectionRange;
             config.AbsorbGaugePerHit = AbsorbGaugePerHit;
-            config.TotalToolCount = Mathf.RoundToInt(TotalToolCount);
+            config.ToolCooldown = ToolCooldown;
             config.HuntDuration = HuntDuration;
         }
 
         /// <summary>
         /// 슬라이더로 만질 수 있는 항목들. UI가 이 표를 그대로 그린다.
         ///
-        /// <c>Step</c>은 슬라이더가 몇 단위로 끊길지다. 도구 개수만 6인 이유는
-        /// 6의 배수가 아니면 나머지가 배치되지 않기 때문이다.
+        /// <c>Step</c>은 슬라이더가 몇 단위로 끊길지다.
         /// </summary>
         public static readonly (string Label, float Min, float Max, float Step, string Unit)[] Fields =
         {
@@ -77,7 +75,7 @@ namespace GhostHunter.Core
             ("재은신 시간", 5f, 40f, 1f, "초"),
             ("도구 탐지 사거리", 5f, 60f, 1f, "m"),
             ("게이지 상승량", 5f, 50f, 1f, "%"),
-            ("도구 총 개수", 30f, 84f, 6f, "개"),
+            ("도구 쿨타임", 5f, 60f, 1f, "초"),
             ("사냥 시간", 30f, 180f, 5f, "초"),
         };
 
@@ -91,7 +89,7 @@ namespace GhostHunter.Core
                 3 => ToolNullifyDuration,
                 4 => DetectionRange,
                 5 => AbsorbGaugePerHit,
-                6 => TotalToolCount,
+                6 => ToolCooldown,
                 _ => HuntDuration,
             };
             set
@@ -104,7 +102,7 @@ namespace GhostHunter.Core
                     case 3: ToolNullifyDuration = value; break;
                     case 4: DetectionRange = value; break;
                     case 5: AbsorbGaugePerHit = value; break;
-                    case 6: TotalToolCount = value; break;
+                    case 6: ToolCooldown = value; break;
                     default: HuntDuration = value; break;
                 }
             }
@@ -118,7 +116,7 @@ namespace GhostHunter.Core
             serializer.SerializeValue(ref ToolNullifyDuration);
             serializer.SerializeValue(ref DetectionRange);
             serializer.SerializeValue(ref AbsorbGaugePerHit);
-            serializer.SerializeValue(ref TotalToolCount);
+            serializer.SerializeValue(ref ToolCooldown);
             serializer.SerializeValue(ref HuntDuration);
         }
 
@@ -131,7 +129,7 @@ namespace GhostHunter.Core
                 && Mathf.Approximately(ToolNullifyDuration, other.ToolNullifyDuration)
                 && Mathf.Approximately(DetectionRange, other.DetectionRange)
                 && Mathf.Approximately(AbsorbGaugePerHit, other.AbsorbGaugePerHit)
-                && Mathf.Approximately(TotalToolCount, other.TotalToolCount)
+                && Mathf.Approximately(ToolCooldown, other.ToolCooldown)
                 && Mathf.Approximately(HuntDuration, other.HuntDuration);
         }
 
@@ -139,6 +137,6 @@ namespace GhostHunter.Core
 
         public override int GetHashCode() => System.HashCode.Combine(
             HidingDuration, InvestigationDuration, FearSkillCooldown,
-            ToolNullifyDuration, DetectionRange, AbsorbGaugePerHit, TotalToolCount, HuntDuration);
+            ToolNullifyDuration, DetectionRange, AbsorbGaugePerHit, ToolCooldown, HuntDuration);
     }
 }

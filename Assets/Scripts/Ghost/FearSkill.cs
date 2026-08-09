@@ -183,6 +183,10 @@ namespace GhostHunter.Ghost
             // 그게 곧 귀신의 위치 제보가 된다 (기술 문서 6-2).
             AbsorbedRpc(RpcTarget.Single(target.OwnerClientId, RpcTargetUse.Temp));
 
+            // 귀신 본인에게도 같은 소리를 들려준다. 흡수가 통했는지 화면만 봐서는
+            // 알기 어려운데, 소리가 그 피드백이 된다.
+            ScareFeedbackRpc();
+
             cooldown.Value = Config != null ? Config.FearSkillCooldown : 30f;
 
             // 흡수 성공 = 현실화 게이지 충전 (시나리오 3-4).
@@ -206,6 +210,10 @@ namespace GhostHunter.Ghost
             target.IsAlive.Value = false;
             KilledRpc(RpcTarget.Single(target.OwnerClientId, RpcTargetUse.Temp));
 
+            // 처치음은 전원이 듣는다. 사냥 단계에서는 이미 귀신이 보이는 상태라
+            // 위치가 새는 것이 없고, 남은 인원이 줄었다는 사실은 모두가 알아야 한다.
+            KillSoundRpc();
+
             cooldown.Value = Config != null ? Config.HuntKillCooldown : 3f;
 
             // 전멸했으면 귀신 승리로 끝난다.
@@ -216,8 +224,30 @@ namespace GhostHunter.Ghost
         [Rpc(SendTo.SpecifiedInParams)]
         private void AbsorbedRpc(RpcParams rpcParams = default)
         {
-            // TODO: 화면 효과 + 공포음 재생 (기술 문서 6-2)
+            // 미리 렌더링해 둔 얼굴 프레임을 화면 가득 넘긴다.
+            // 이 RPC는 흡수당한 본인에게만 오므로 대상을 따로 가릴 필요가 없다.
+            UI.JumpScareOverlay.Play();
+            Audio.GameAudio.PlayJumpScare();
             Debug.Log("[Exorcist] 영혼을 흡수당했다! (계속 플레이 가능)");
+        }
+
+        /// <summary>
+        /// 흡수에 성공한 귀신 본인에게 가는 소리.
+        ///
+        /// 이 컴포넌트는 귀신의 플레이어 오브젝트에 붙어 있으므로 <c>SendTo.Owner</c>가
+        /// 곧 귀신이다. 대상 퇴마사에게 가는 <see cref="AbsorbedRpc"/>와 짝이다.
+        /// </summary>
+        [Rpc(SendTo.Owner)]
+        private void ScareFeedbackRpc()
+        {
+            Audio.GameAudio.PlayJumpScare();
+        }
+
+        /// <summary>처치음. 위치와 무관하게 전원이 듣는다.</summary>
+        [Rpc(SendTo.Everyone)]
+        private void KillSoundRpc()
+        {
+            Audio.GameAudio.PlayKill();
         }
 
         /// <summary>사냥 단계에서 죽은 본인에게만 가는 통지.</summary>

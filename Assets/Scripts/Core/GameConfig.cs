@@ -56,14 +56,15 @@ namespace GhostHunter.Core
         [Tooltip("영혼 이동속도(m/s). 벽에 막히는 대신 속도 이점은 주지 않는다.")]
         public float SoulMoveSpeed = 4f;
 
-        [Tooltip("사냥 단계 귀신 이동속도(m/s). 시나리오상 퇴마사의 2배.")]
+        [Tooltip("사용하지 않음. 사냥 단계도 SoulMoveSpeed × GhostSprintMultiplier를 쓴다 " +
+                 "— 단계마다 조작 규칙이 달라지지 않도록 통일했다.")]
         public float GhostHuntMoveSpeed = 8f;
 
         [Tooltip("퇴마사 Shift 달리기 배수.")]
         public float SprintMultiplier = 1.6f;
 
-        [Tooltip("영혼 Shift 달리기 배수. 퇴마사보다 크게 잡아 귀신이 추격에서 우위를 갖는다. " +
-                 "사냥 단계 귀신에게는 적용하지 않는다 — 이미 2배라 곱하면 손쓸 수 없이 빨라진다.")]
+        [Tooltip("귀신 Shift 달리기 배수. 퇴마사보다 크게 잡아 추격에서 우위를 갖는다. " +
+                 "은신·조사·사냥 모든 단계에 동일하게 적용된다.")]
         public float GhostSprintMultiplier = 2f;
 
         [Tooltip("공포스킬 사거리(m). 어몽어스의 칼처럼 밀착해야 발동한다. 사냥 단계의 처형도 같은 거리를 쓴다.")]
@@ -79,8 +80,15 @@ namespace GhostHunter.Core
         [Tooltip("제단에 서로 다른 도구가 이만큼 모이면 판정한다.")]
         public int AltarCapacity = 3;
 
-        [Tooltip("맵에 배치할 도구 총 개수. 종류당 균등하게 나눠 배치된다.")]
-        public int TotalToolCount = 30;
+        [Tooltip("사용하지 않음. 도구는 이제 종류당 정확히 1개씩만 배치된다.")]
+        public int TotalToolCount = 60;
+
+        [Tooltip("도구 사용 후 쿨타임(초). <b>들고 있던 도구 전부</b>에 함께 걸리고, " +
+                 "버리거나 남에게 넘어가도 그 도구를 따라간다.")]
+        public float ToolCooldown = 20f;
+
+        [Tooltip("한 사람이 동시에 들 수 있는 도구 개수. 1~4번 키로 전환한다.")]
+        public int MaxCarriedTools = 4;
 
         [Tooltip("한 방의 최대 인원 (귀신 1 + 퇴마사 4).")]
         public int MaxPlayers = 5;

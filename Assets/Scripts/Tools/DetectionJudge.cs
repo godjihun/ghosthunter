@@ -14,8 +14,26 @@ namespace GhostHunter.Tools
     /// </summary>
     public static class DetectionJudge
     {
-        /// <summary>본체 중심 높이. 원점이 발바닥이라 그대로 쓰면 바닥을 겨눠야 잡힌다.</summary>
-        private const float BodyCenterHeight = 1.0f;
+        /// <summary>
+        /// 본체에서 검사할 지점들. <b>하나라도 화면에 걸리고 시선이 통하면 성공</b>이다.
+        ///
+        /// 예전에는 허리 한 점만 봤는데, 그러면 <b>기둥 뒤에 몸이 반쯤 보여도 실패</b>했다.
+        /// 화면에는 분명히 귀신이 있는데 판정만 안 되는 상황이라 납득이 안 된다.
+        ///
+        /// <c>Up</c>은 발바닥 기준 높이, <c>Side</c>는 <b>관찰자 기준</b> 좌우 폭이다.
+        /// 본체의 정면 방향을 쓰지 않는 이유는 두 가지다 — 영혼이 나가 있으면 본체의
+        /// 회전을 알 수 없고, 애초에 판정에 필요한 건 <b>보는 쪽에서 본 실루엣의 폭</b>이다.
+        /// </summary>
+        private static readonly (float Up, float Side, string Name)[] BodyPoints =
+        {
+            (1.70f,  0.00f, "머리"),
+            (1.45f, -0.22f, "왼어깨"),
+            (1.45f,  0.22f, "오른어깨"),
+            (1.05f, -0.35f, "왼팔"),
+            (1.05f,  0.35f, "오른팔"),
+            (0.50f, -0.15f, "왼다리"),
+            (0.50f,  0.15f, "오른다리"),
+        };
 
         /// <summary>
         /// 도구를 쓴 순간 <b>사용자 화면 안에</b> 귀신 본체가 있었는가?
@@ -65,42 +83,78 @@ namespace GhostHunter.Tools
                 return false;
             }
 
+            // <b>이미 밝혀낸 약점으로는 다시 탐지할 수 없다.</b> 허용하면 같은 도구로
+            // 재은신 사이클을 무한히 돌려 게임이 끝나지 않는다.
+            if (manager.IsWeaknessFound(tool))
+            {
+                Fail(config, $"{tool}은(는) 이미 밝혀낸 약점이다");
+                return false;
+            }
+
             Vector3 bodyPosition = ghostController != null
                 ? ghostController.BodyPosition
                 : ghost.transform.position;
-
-            Vector3 target = bodyPosition + Vector3.up * BodyCenterHeight;
 
             if (config.DebugDetection)
             {
                 bool soulOut = ghostController != null && ghostController.IsSoulOut.Value;
                 Debug.Log($"[탐지] 본체 {bodyPosition:F1} / 눈 {eyePosition:F1} / "
-                    + $"거리 {Vector3.Distance(eyePosition, target):F1}m / "
+                    + $"거리 {Vector3.Distance(eyePosition, bodyPosition):F1}m / "
                     + $"영혼 분리 {(soulOut ? "예 — 본체는 영혼과 다른 곳에 있다" : "아니오")}");
             }
 
-            if (!IsOnScreen(eyePosition, eyeRotation, verticalFov, aspect, target, config.DetectionRange))
+            // 관찰자 기준 좌우 축. 어깨·팔·다리를 이 방향으로 벌려 실루엣 폭을 만든다.
+            Vector3 side = ViewerSideAxis(eyeRotation);
+
+            int offScreen = 0;
+            string blockedBy = null;
+            var wallMask = LayerMask.GetMask("Wall", "Door");
+
+            foreach (var (up, sideOffset, name) in BodyPoints)
             {
-                Fail(config, "화면 밖 또는 사거리 초과");
-                return false;
+                Vector3 target = bodyPosition + Vector3.up * up + side * sideOffset;
+
+                if (!IsOnScreen(eyePosition, eyeRotation, verticalFov, aspect, target, config.DetectionRange))
+                {
+                    offScreen++;
+                    continue;
+                }
+
+                // 벽 너머까지 잡히면 사거리를 아무리 줄여도 "복도에서 한 바퀴 훑기"가
+                // 최적 전략이 된다. 기본값은 막고, 필요하면 설정에서 열 수 있게 둔다.
+                if (!config.DetectionThroughWalls
+                    && Physics.Linecast(eyePosition, target, out var block, wallMask, QueryTriggerInteraction.Ignore))
+                {
+                    blockedBy ??= $"{name}→{block.collider.name}";
+                    continue;
+                }
+
+                if (config.DebugDetection)
+                {
+                    Debug.Log($"[탐지] 성공 — {name}이(가) 보였다");
+                }
+
+                return true;
             }
 
-            // 벽 너머까지 잡히면 사거리를 아무리 줄여도 "복도에서 한 바퀴 훑기"가
-            // 최적 전략이 된다. 기본값은 막고, 필요하면 설정에서 열 수 있게 둔다.
-            if (!config.DetectionThroughWalls
-                && Physics.Linecast(eyePosition, target, out var block,
-                    LayerMask.GetMask("Wall", "Door"), QueryTriggerInteraction.Ignore))
-            {
-                Fail(config, $"시선이 막힘 — {block.collider.name} @ {block.point:F1}");
-                return false;
-            }
+            // 어느 지점도 통과하지 못했다. 화면 밖이었는지 가려졌는지를 나눠 남긴다.
+            Fail(config, offScreen >= BodyPoints.Length
+                ? "전 지점 화면 밖 또는 사거리 초과"
+                : $"보이는 지점이 전부 막힘 — {blockedBy}");
+            return false;
+        }
 
-            if (config.DebugDetection)
-            {
-                Debug.Log("[탐지] 성공");
-            }
+        /// <summary>
+        /// 관찰자가 본 "좌우" 방향. 수평면에 눕혀서 쓴다 —
+        /// 카메라를 위아래로 젖혔을 때 어깨 폭이 같이 기울면 실루엣이 좁아진다.
+        /// </summary>
+        private static Vector3 ViewerSideAxis(Quaternion eyeRotation)
+        {
+            Vector3 flatForward = Vector3.ProjectOnPlane(eyeRotation * Vector3.forward, Vector3.up);
 
-            return true;
+            return flatForward.sqrMagnitude > 0.0001f
+                ? Vector3.Cross(Vector3.up, flatForward).normalized
+                : eyeRotation * Vector3.right;   // 바로 위/아래를 볼 때의 예외
         }
 
         /// <summary>

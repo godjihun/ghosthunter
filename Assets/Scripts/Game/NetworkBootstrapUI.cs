@@ -328,9 +328,16 @@ namespace GhostHunter.Game
                     var inventory = local.GetComponent<Exorcist.ExorcistInventory>();
                     if (inventory != null)
                     {
-                        GUILayout.Label(inventory.HasTool.Value
-                            ? $"소지: {inventory.HeldTool.Value.ToKorean()}"
-                            : "소지: 없음");
+                        var slots = new System.Text.StringBuilder();
+                        for (int i = 0; i < inventory.Capacity; i++)
+                        {
+                            if (i > 0) slots.Append(' ');
+                            bool selected = i == inventory.SelectedSlot.Value;
+                            if (selected) slots.Append('[');
+                            slots.Append(inventory.HasToolAt(i) ? inventory.TypeAt(i).ToKorean() : "-");
+                            if (selected) slots.Append(']');
+                        }
+                        GUILayout.Label($"소지: {slots}");
                     }
                 }
             }
