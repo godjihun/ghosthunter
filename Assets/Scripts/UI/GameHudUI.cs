@@ -73,6 +73,9 @@ namespace GhostHunter.UI
         private string announceText;
         private float announceTimer;
 
+        /// <summary>마지막으로 본 약점 발견 개수. 늘어난 순간에만 공지한다.</summary>
+        private int lastFoundCount;
+
         /// <summary>마지막으로 본 단계. 바뀌는 순간을 잡기 위한 것.</summary>
         private GamePhase lastPhase;
 
@@ -122,6 +125,49 @@ namespace GhostHunter.UI
             }
 
             TickAnnouncement();
+
+            // 단계 안내보다 <b>뒤에</b> 부른다. 탐지 성공은 곧 은신 전환을 부르는데,
+            // 같은 프레임에 둘 다 뜨면 "어떤 도구로 찾았는가"가 묻힌다.
+            TickWeaknessAnnouncement();
+        }
+
+        /// <summary>
+        /// 약점이 밝혀지는 순간을 잡아 <b>전원에게</b> 공지한다.
+        ///
+        /// RPC를 따로 파지 않는다 — 목록이 이미 동기화되므로 각자 자기 쪽 증가를 보고
+        /// 띄우면 그것으로 전원이 본다. 도중에 접속한 사람에게 옛 공지가 뜨지도 않는다.
+        /// </summary>
+        private void TickWeaknessAnnouncement()
+        {
+            var manager = GameManager.Instance;
+            if (manager == null)
+            {
+                return;
+            }
+
+            int count = manager.FoundWeaknesses.Count;
+
+            // 판이 바뀌면 목록이 비워진다. 그때는 새 공지가 아니라 초기화다.
+            if (count == lastFoundCount)
+            {
+                return;
+            }
+
+            int previous = lastFoundCount;
+            lastFoundCount = count;
+
+            if (count <= previous || count == 0)
+            {
+                return;
+            }
+
+            var tool = (Core.ToolType)manager.FoundWeaknesses[count - 1];
+            int total = GameManager.Config != null ? GameManager.Config.WeaknessCount : 3;
+
+            announceText = count >= total
+                ? $"{tool.ToKorean()}! 약점을 모두 밝혀냈습니다."
+                : $"{tool.ToKorean()}(으)로 귀신을 찾아냈습니다!\n약점 {count}/{total} — 귀신이 자리를 옮깁니다.";
+            announceTimer = AnnounceDuration;
         }
 
         /// <summary>단계가 바뀌는 순간을 잡아 안내를 띄우고, 시간을 깎는다.</summary>
@@ -142,11 +188,18 @@ namespace GhostHunter.UI
                 // "귀신을 퇴마하세요"를 귀신이 읽게 된다.
                 bool isGhost = NetworkPlayer.GetLocal()?.IsGhost ?? false;
 
+                // 은신은 <b>판이 시작될 때만이 아니라</b> 탐지에 성공할 때마다 돌아온다.
+                // 그래서 첫 은신인지 재은신인지에 따라 문구가 달라야 한다.
+                bool rehiding = (GameManager.Instance?.FoundWeaknesses.Count ?? 0) > 0;
+
                 string text = phase switch
                 {
+                    GamePhase.Hiding => isGhost
+                        ? (rehiding ? "들켰습니다…\n다른 곳으로 자리를 옮기세요." : "몸을 숨기세요…")
+                        : (rehiding ? "귀신이 자리를 옮기고 있습니다…" : "귀신이 숨고 있습니다…"),
                     GamePhase.Investigation => isGhost
                         ? "조사 시간입니다…\n공포스킬로 퇴마를 저지하세요."
-                        : "조사 시간입니다…\n올바른 퇴마 도구 3종을 찾아 제단에 바쳐 귀신을 퇴마하세요.",
+                        : "조사 시간입니다…\n도구로 귀신을 찾아내거나, 약점 3종을 제단에 바치세요.",
                     GamePhase.Hunt => isGhost
                         ? "사냥의 시간입니다…\n모든 퇴마사를 처치하세요."
                         : "이제 사냥이 시작됩니다…\n귀신으로부터 살아남으세요.",
@@ -572,7 +625,11 @@ namespace GhostHunter.UI
         private void DrawInteractPrompt(NetworkPlayer local)
         {
             var interactor = local.GetComponent<PlayerInteractor>();
-            if (interactor == null || interactor.Target == null)
+
+            // <b>파괴 여부까지 확인해야 한다.</b> 도구를 줍는 순간 서버가 그 오브젝트를
+            // 디스폰하는데, Target은 인터페이스라 <c>== null</c>로는 걸러지지 않는다
+            // (PlayerInteractor.IsAlive 주석 참고).
+            if (interactor == null || !PlayerInteractor.IsAlive(interactor.Target))
             {
                 return;
             }
@@ -632,16 +689,31 @@ namespace GhostHunter.UI
             var offered = altar.GetOffered();
             int capacity = GameManager.Config != null ? GameManager.Config.AltarCapacity : 3;
 
-            const float w = 170f;
-            float h = 52f + capacity * 24f;
+            // 탐지로 밝혀낸 약점도 같이 보여준다 — 승리 경로가 둘이라
+            // 한쪽만 보이면 팀이 진행도를 가늠할 수 없다.
+            var manager = GameManager.Instance;
+            int found = manager != null ? manager.FoundWeaknesses.Count : 0;
+            int weaknessCount = GameManager.Config != null ? GameManager.Config.WeaknessCount : 3;
+
+            const float w = 190f;
+            float h = 52f + capacity * 24f + 30f + weaknessCount * 24f;
             var rect = new Rect(Screen.width - w - 16f, 90f, w, h);
 
             GUI.DrawTexture(rect, barBack);
             GUI.Box(rect, GUIContent.none);
 
             GUILayout.BeginArea(new Rect(rect.x + 10f, rect.y + 8f, rect.width - 20f, rect.height - 16f));
+
+            GUILayout.Label($"밝혀낸 약점  {found}/{weaknessCount}", leftLabelStyle);
+            for (int i = 0; i < weaknessCount; i++)
+            {
+                GUILayout.Label(manager != null && i < found
+                    ? $"· {((Core.ToolType)manager.FoundWeaknesses[i]).ToKorean()}"
+                    : "· ―", leftLabelStyle);
+            }
+
+            GUILayout.Space(8);
             GUILayout.Label($"제단  {offered.Count}/{capacity}", leftLabelStyle);
-            GUILayout.Space(4);
 
             for (int i = 0; i < capacity; i++)
             {
@@ -855,8 +927,17 @@ namespace GhostHunter.UI
                     continue;
                 }
 
+                var type = inventory.TypeAt(i);
                 GUI.Label(new Rect(rect.x, rect.y + rect.height * 0.5f - 10f, rect.width, 20f),
-                    inventory.TypeAt(i).ToKorean(), slotLabelStyle);
+                    type.ToKorean(), slotLabelStyle);
+
+                // 이미 밝혀낸 약점은 쿨타임과 무관하게 영영 못 쓴다. 그 사실을 먼저 알린다.
+                var manager = GameManager.Instance;
+                if (manager != null && manager.IsWeaknessFound(type))
+                {
+                    GUI.Label(new Rect(rect.x, rect.yMax - 20f, rect.width, 18f), "사용됨", slotLabelStyle);
+                    continue;
+                }
 
                 // 쿨타임은 숫자로만 보여준다. 남은 초를 알면 팀이 사용 순서를 짤 수 있다.
                 float cooldown = inventory.CooldownAt(i);
@@ -867,8 +948,13 @@ namespace GhostHunter.UI
                 }
             }
 
-            GUI.Label(new Rect(left, top + slotSize + 2f, total, 18f),
-                "1~4 선택  좌클릭 사용  G 내려놓기", slotLabelStyle);
+            // 은신 중에는 탐지가 아예 성립하지 않는다. 눌러도 아무 일이 없으면
+            // 고장으로 오해하므로 이유를 적어준다.
+            string hint = GameManager.CurrentPhase == GamePhase.Investigation
+                ? "1~4 선택  좌클릭 사용  G 내려놓기"
+                : "은신 중 — 도구를 쓸 수 없다  (1~4 선택 / G 내려놓기)";
+
+            GUI.Label(new Rect(left, top + slotSize + 2f, total, 18f), hint, slotLabelStyle);
         }
     }
 }

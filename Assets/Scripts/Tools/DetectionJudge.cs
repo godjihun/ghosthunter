@@ -83,6 +83,14 @@ namespace GhostHunter.Tools
                 return false;
             }
 
+            // <b>이미 밝혀낸 약점으로는 다시 탐지할 수 없다.</b> 허용하면 같은 도구로
+            // 재은신 사이클을 무한히 돌려 게임이 끝나지 않는다.
+            if (manager.IsWeaknessFound(tool))
+            {
+                Fail(config, $"{tool}은(는) 이미 밝혀낸 약점이다");
+                return false;
+            }
+
             Vector3 bodyPosition = ghostController != null
                 ? ghostController.BodyPosition
                 : ghost.transform.position;

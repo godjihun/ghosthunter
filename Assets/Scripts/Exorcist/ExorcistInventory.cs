@@ -219,7 +219,21 @@ namespace GhostHunter.Exorcist
         public void OnUseTool(InputValue value)
         {
             // 빈 칸을 고르고 있으면 손에 든 게 없는 것이다.
-            if (!IsOwner || !value.isPressed || !TryGetSelected(out _, out _))
+            if (!IsOwner || !value.isPressed || !TryGetSelected(out var selected, out _))
+            {
+                return;
+            }
+
+            // <b>탐지는 조사 단계 전용이다.</b> 서버도 같은 검사를 하지만(UseToolRpc),
+            // 여기서 걸러야 은신 중에 헛되이 RPC를 쏘지 않는다.
+            if (GameManager.CurrentPhase != GamePhase.Investigation)
+            {
+                return;
+            }
+
+            // 이미 밝혀낸 약점은 다시 쓸 수 없다. 여기서 막지 않으면 눌리기는 해서
+            // <b>손에 든 도구 전부가 쿨타임에 들어간다</b> — 아무 소득 없이 손해만 본다.
+            if (GameManager.Instance != null && GameManager.Instance.IsWeaknessFound(selected))
             {
                 return;
             }
@@ -347,6 +361,14 @@ namespace GhostHunter.Exorcist
                 return;
             }
 
+            // 이미 밝혀낸 약점은 아예 쓰이지 않는다 — 쿨타임도 걸지 않는다.
+            // 걸어버리면 "쓸모없는 도구로 팀의 쿨타임을 태우는" 짓이 가능해진다.
+            var manager = GameManager.Instance;
+            if (manager != null && manager.IsWeaknessFound(toolType))
+            {
+                return;
+            }
+
             // <b>도구는 사라지지 않는다.</b> 대신 손에 있는 것 전부가 쿨타임에 들어간다.
             ServerStartCooldownOnAll();
 
@@ -355,22 +377,27 @@ namespace GhostHunter.Exorcist
 
             if (detected)
             {
-                // 페널티: 영혼 강제 복귀 + 도구 무효화 + 본체 이동 허용 (시나리오 3-5).
+                // 탐지음은 귀신에게도 들린다. 어차피 곧 은신 단계로 끌려가 들킨 걸 알게 된다.
                 var ghost = NetworkPlayer.GetGhost();
-                ghost?.GetComponent<GhostController>()?.ServerApplyDetectionPenalty();
-
-                // 탐지음은 귀신에게도 들린다. 이미 강제 복귀로 들킨 걸 아는 상황이라
-                // 새로 새는 정보가 없다.
                 if (ghost != null)
                 {
                     GhostHeardDetectionRpc(RpcTarget.Single(ghost.OwnerClientId, RpcTargetUse.Temp));
                 }
+
+                // <b>결과 통지를 먼저 보내고 단계를 바꾼다.</b> 순서를 뒤집으면 단계 전환
+                // 안내와 탐지 결과가 같은 프레임에 겹쳐, 어느 도구로 찾았는지 묻히기 쉽다.
+                DetectionResultRpc(true, toolType,
+                    RpcTarget.Single(rpcParams.Receive.SenderClientId, RpcTargetUse.Temp));
+
+                // 약점 기록 → 3개째면 승리, 아니면 귀신이 다시 숨는다.
+                GameManager.Instance?.ServerOnWeaknessFound(toolType);
+                return;
             }
 
-            // ⚠️ 성공이든 실패든 반드시 응답을 보낸다.
-            // 실패 시 응답을 생략하면 "통신이 없었다" 자체가 단서가 되어
+            // ⚠️ 실패해도 반드시 응답을 보낸다.
+            // 응답을 생략하면 "통신이 없었다" 자체가 단서가 되어
             // 시나리오 3-2의 모호성이 깨진다 (기술 문서 2-4).
-            DetectionResultRpc(detected, toolType,
+            DetectionResultRpc(false, toolType,
                 RpcTarget.Single(rpcParams.Receive.SenderClientId, RpcTargetUse.Temp));
         }
 

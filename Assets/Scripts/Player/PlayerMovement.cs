@@ -124,6 +124,14 @@ namespace GhostHunter.Player
                 return;
             }
 
+            // <b>대기방·결과 화면에는 어떤 잠금도 남아 있으면 안 된다.</b>
+            // 이동 잠금은 귀신 본체 고정용이라 판 안에서만 의미가 있는데, 판이 끝난 뒤
+            // 값이 남아 있으면 대기방에서 그대로 굳어버린다 — 실제로 그 버그를 냈다.
+            if (!GameManager.IsGameplayActive)
+            {
+                MovementLocked = false;
+            }
+
             // 결과 화면에서는 중력만 적용하고 조작은 받지 않는다.
             // 대기방은 걸어다니는 공간이므로 여기 포함된다.
             bool canControl = GameManager.IsFirstPersonActive && !MovementLocked;
