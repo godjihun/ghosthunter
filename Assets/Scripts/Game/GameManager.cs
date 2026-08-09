@@ -39,8 +39,12 @@ namespace GhostHunter.Game
         /// 각자 판단하게 두면 "커서는 잠겼는데 UI는 떠 있는" 상태가 생기므로 한 곳에 모은다.
         ///
         /// 결과 화면만 예외다. 거기서는 마우스로 버튼을 눌러야 한다.
+        ///
+        /// <b>`Instance != null`을 반드시 같이 본다.</b> MainMenuScene에는 GameManager가 없는데,
+        /// 없다고 `Lobby`로 취급해버리면(예전 방식) 로비 화면 위에 플레이어 1인칭 카메라가
+        /// 뜨고 커서가 잠겨버린다 — GameManager가 존재하는 GameScene에서만 몸을 조작할 수 있다.
         /// </summary>
-        public static bool IsFirstPersonActive => CurrentPhase != GamePhase.Result;
+        public static bool IsFirstPersonActive => Instance != null && CurrentPhase != GamePhase.Result;
 
         /// <summary>
         /// 지금이 "판이 진행 중"인가.

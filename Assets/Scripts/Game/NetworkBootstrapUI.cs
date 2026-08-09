@@ -2,76 +2,40 @@ using GhostHunter.Core;
 using GhostHunter.Player;
 using Unity.Netcode;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 namespace GhostHunter.Game
 {
     /// <summary>
     /// 개발용 임시 UI. IMGUI라 씬 세팅이 필요 없다.
     ///
-    /// 로비·결과 화면에서는 <b>가운데 패널</b>로 크게 띄우고,
-    /// 게임 중에는 방해되지 않게 좌측 상단 작은 상태 표시로 물러난다.
-    /// 정식 로비 UI(구현 순서 9번)로 교체될 자리다.
+    /// <b>방 만들기·참가·닉네임은 더 이상 여기서 다루지 않는다.</b> MainMenuScene의
+    /// <see cref="UI.LobbyJoinUI"/>가 접속을 전담하고, 방을 만들면 곧바로 GameScene으로
+    /// 넘어간다(<see cref="PreGameLobby.ServerStartGame"/>) — GameScene은 이제 <b>항상
+    /// 접속 후에만</b> 로드된다. 이 클래스는 게임 중 좌측 상단 상태 표시와,
+    /// 결과 화면(승패·"대기방으로 돌아가기")만 그린다.
     /// </summary>
     public class NetworkBootstrapUI : MonoBehaviour
     {
         private const float PanelWidth = 320f;
-        private const float PanelHeight = 420f;
-
-        /// <summary>이 시간 안에 못 붙으면 방이 없는 것으로 본다.</summary>
-        private const float ConnectTimeoutSeconds = 5f;
-
-        /// <summary>포트가 풀리기를 기다리며 호스트 시작을 재시도하는 시간.</summary>
-        private const float HostRetrySeconds = 3f;
+        private const float PanelHeight = 260f;
 
         private GUIStyle titleStyle;
 
-        private float connectTimeout;
         private string statusMessage;
         private bool subscribed;
-
-        /// <summary>호스트 시작을 재시도할 남은 시간. 0이면 재시도 안 함.</summary>
-        private float hostRetryTimer;
-
-        /// <summary>참가 코드 입력란. Relay가 발급하는 코드는 6자 안팎이다.</summary>
-        private string joinCodeInput = string.Empty;
-
-        /// <summary>
-        /// 방 만들기. <b>결과를 기다리는 동안 UI를 막아야 한다</b> —
-        /// Relay 할당은 네트워크 왕복이라 즉시 끝나지 않는다.
-        /// </summary>
-        private async System.Threading.Tasks.Task HostAsync()
-        {
-            bool ok = await RelayConnection.StartHostAsync();
-            statusMessage = ok
-                ? $"방을 만들었습니다. 참가 코드: {RelayConnection.JoinCode}"
-                : RelayConnection.LastError;
-        }
-
-        private async System.Threading.Tasks.Task JoinAsync(string code)
-        {
-            bool ok = await RelayConnection.StartClientAsync(code);
-            if (!ok)
-            {
-                statusMessage = RelayConnection.LastError;
-                connectTimeout = 0f;
-            }
-            else
-            {
-                statusMessage = null;
-            }
-        }
 
         /// <summary>다음 프레임에 Shutdown을 실행해야 하는가. 아래 RequestShutdown 주석 참고.</summary>
         private bool shutdownRequested;
         private string pendingMessage;
 
         /// <summary>
-        /// 접속 실패를 <b>직접 감시한다.</b>
+        /// 접속이 끊기는 것을 <b>직접 감시한다.</b>
         ///
-        /// <c>StartClient()</c>는 방이 없어도 즉시 true를 돌려준다 — 실제 연결은
-        /// 그 뒤에 비동기로 이뤄지기 때문이다. 그래서 이걸 성공으로 받아들이면
-        /// "모드: 클라이언트"인데 아무것도 못 하는 상태에 갇힌다.
-        /// 끊김 통지와 제한시간, 두 가지로 실패를 잡는다.
+        /// 로비(MainMenuScene)를 거쳐야만 GameScene에 도착하므로 여기서는 항상 접속된
+        /// 상태로 시작한다. 그런데도 도중에 끊기면(호스트 종료 등) 캐릭터가 사라지고
+        /// 아무 화면도 못 그리는 상태가 되므로, 끊김 콜백으로 붙잡아 메인 메뉴로
+        /// 돌아갈 길을 만들어준다.
         /// </summary>
         private void Update()
         {
@@ -88,58 +52,6 @@ namespace GhostHunter.Game
             }
 
             TickShutdown(nm);
-
-            // 접속 시도 중일 때만 제한시간을 센다.
-            if (!shutdownRequested && nm.IsClient && !nm.IsConnectedClient && !nm.IsServer)
-            {
-                connectTimeout -= Time.deltaTime;
-                if (connectTimeout <= 0f)
-                {
-                    RequestShutdown("방을 찾을 수 없습니다. 먼저 호스트로 방을 만드세요.");
-                }
-            }
-
-            TickHostRetry(nm);
-        }
-
-        /// <summary>
-        /// 호스트 시작 재시도.
-        ///
-        /// <c>Shutdown()</c>은 즉시 끝나지 않는다 — 실패한 접속을 정리하는 동안
-        /// 포트가 아직 물려 있어서, 그 순간 방을 만들면 "포트 사용 중"으로 거부된다.
-        /// 사용자에게 "잠시 뒤 다시 누르세요"라고 떠넘기는 대신 정리가 끝나면 알아서 잡는다.
-        /// </summary>
-        private void TickHostRetry(NetworkManager nm)
-        {
-            if (hostRetryTimer <= 0f)
-            {
-                return;
-            }
-
-            hostRetryTimer -= Time.deltaTime;
-
-            // 아직 정리 중이면 건드리지 않는다.
-            if (nm.ShutdownInProgress || nm.IsListening)
-            {
-                if (nm.IsListening)
-                {
-                    hostRetryTimer = 0f;
-                    statusMessage = null;
-                }
-                return;
-            }
-
-            if (nm.StartHost())
-            {
-                hostRetryTimer = 0f;
-                statusMessage = null;
-                return;
-            }
-
-            if (hostRetryTimer <= 0f)
-            {
-                statusMessage = "방을 만들지 못했습니다. 다른 유니티 창이 7777 포트를 쓰고 있는지 확인하세요.";
-            }
         }
 
         private void OnDestroy()
@@ -172,7 +84,6 @@ namespace GhostHunter.Game
                 return;
             }
 
-            // 붙어보지도 못하고 끊겼다 = 방이 없거나 거부당했다.
             if (!nm.IsConnectedClient)
             {
                 RequestShutdown("접속이 끊겼습니다. 방이 없거나 호스트가 종료했습니다.");
@@ -191,7 +102,6 @@ namespace GhostHunter.Game
         {
             shutdownRequested = true;
             pendingMessage = message;
-            connectTimeout = 0f;
         }
 
         /// <summary>예약된 Shutdown을 안전한 시점에 실행한다.</summary>
@@ -234,11 +144,10 @@ namespace GhostHunter.Game
 
             // <b>기준은 단계가 아니라 "내 몸이 있는가"다.</b>
             //
-            // 접속하면 대기방에 캐릭터로 서게 되므로, 그때부터 이 큰 패널은
-            // 화면 한가운데를 가리는 방해물일 뿐이다. 방을 만들거나 코드를 넣는
-            // 일은 몸이 생기기 전에 끝나 있다.
-            //
-            // 결과 화면은 예외다. 몸은 있지만 "대기방으로" 버튼을 눌러야 한다.
+            // GameScene은 항상 접속 후에만 로드되므로 여기 있는 동안 몸이 없다는 것은
+            // "이미 접속이 끊겼다"는 뜻이다(예전엔 "아직 접속 전"도 포함했지만 그 경로는
+            // 이제 MainMenuScene 쪽에만 있다). 결과 화면은 몸은 있지만 "대기방으로" 버튼을
+            // 눌러야 하는 예외다.
             bool hasBody = Player.NetworkPlayer.GetLocal() != null;
             bool isResult = GameManager.CurrentPhase == GamePhase.Result;
 
@@ -252,7 +161,7 @@ namespace GhostHunter.Game
             }
         }
 
-        /// <summary>로비·결과 화면. 마우스 커서가 살아 있는 상태다.</summary>
+        /// <summary>접속 끊김 안내 또는 결과 화면. 마우스 커서가 살아 있는 상태다.</summary>
         private void DrawCenterPanel(NetworkManager nm)
         {
             var rect = new Rect(
@@ -263,80 +172,35 @@ namespace GhostHunter.Game
             GUI.Box(rect, GUIContent.none);
             GUILayout.BeginArea(new Rect(rect.x + 16, rect.y + 16, rect.width - 32, rect.height - 32));
 
-            var manager = GameManager.Instance;
-            bool isResult = manager != null && manager.Phase.Value == GamePhase.Result;
-
-            // 여기가 <b>로비</b>다 — 방을 만들거나 코드로 들어가는 화면.
-            // 접속한 뒤 캐릭터로 서 있는 방은 <b>대기방</b>이라 부른다. 둘은 다른 곳이다.
-            GUILayout.Label(isResult ? "게임 종료" : "로비", titleStyle);
-            GUILayout.Space(12);
-
-            // IsClient는 "접속을 시도 중"만으로도 true가 된다.
-            // 실제로 붙었는지는 IsConnectedClient로 봐야 한다.
             bool connected = nm.IsServer || nm.IsConnectedClient;
 
             if (!connected)
             {
-                if (nm.IsClient)
-                {
-                    // 접속 시도 중. 방이 없으면 여기서 시간만 흐르다 실패한다.
-                    GUILayout.Label($"접속 중… ({Mathf.CeilToInt(connectTimeout)}초)");
-                    GUILayout.Space(8);
-                    if (GUILayout.Button("취소", GUILayout.Height(32)))
-                    {
-                        RequestShutdown(null);
-                    }
-                    GUILayout.EndArea();
-                    return;
-                }
-
-                // 이전 연결을 정리하는 중에는 버튼을 막는다. 여기서 시작하면 반드시 실패한다.
-                bool busy = nm.ShutdownInProgress || hostRetryTimer > 0f;
-
-                GUILayout.Label(busy ? "이전 연결을 정리하는 중…" : "접속되지 않았습니다.");
+                // GameScene은 로비를 거쳐야만 들어오므로, 여기 도달했는데 미접속이면
+                // 도중에 끊긴 것이다 — 돌아갈 곳이 없으면 화면이 막힌 채로 남는다.
+                GUILayout.Label("연결이 끊겼습니다", titleStyle);
+                GUILayout.Space(10);
 
                 if (!string.IsNullOrEmpty(statusMessage))
                 {
-                    GUILayout.Space(4);
                     GUILayout.Label(statusMessage);
+                    GUILayout.Space(10);
                 }
 
-                GUILayout.Space(8);
-
-                // 닉네임은 접속 전에 정해야 한다. 스폰 순간 서버로 올라가므로
-                // 접속한 뒤에 바꾸면 이번 판에는 반영되지 않는다.
-                GUILayout.Label("닉네임");
-                NetworkPlayer.LocalNickname = GUILayout.TextField(
-                    NetworkPlayer.LocalNickname ?? string.Empty, 10, GUILayout.Height(24));
-
-                GUILayout.Space(8);
-
-                // 참가 코드
-                GUILayout.Label("참가 코드 (참가할 때만)");
-                joinCodeInput = GUILayout.TextField(joinCodeInput ?? string.Empty, 8, GUILayout.Height(24));
-
-                GUILayout.Space(8);
-
-                GUI.enabled = !busy && !RelayConnection.IsBusy;
-
-                if (GUILayout.Button("방 만들기", GUILayout.Height(36)))
+                if (GUILayout.Button("메인 메뉴로", GUILayout.Height(36)))
                 {
-                    statusMessage = "방을 만드는 중…";
-                    _ = HostAsync();
+                    SceneManager.LoadScene("MainMenuScene");
                 }
-
-                if (GUILayout.Button("코드로 참가", GUILayout.Height(36)))
-                {
-                    statusMessage = "참가하는 중…";
-                    connectTimeout = ConnectTimeoutSeconds;
-                    _ = JoinAsync(joinCodeInput);
-                }
-
-                GUI.enabled = true;
 
                 GUILayout.EndArea();
                 return;
             }
+
+            var manager = GameManager.Instance;
+            bool isResult = manager != null && manager.Phase.Value == GamePhase.Result;
+
+            GUILayout.Label(isResult ? "게임 종료" : "대기방", titleStyle);
+            GUILayout.Space(12);
 
             GUILayout.Label(nm.IsHost ? "모드: 호스트(방장)" : nm.IsServer ? "모드: 서버" : "모드: 클라이언트");
 
@@ -366,26 +230,19 @@ namespace GhostHunter.Game
 
             GUILayout.FlexibleSpace();
 
-            if (nm.IsServer && manager != null && manager.Phase.Value == GamePhase.Lobby)
-            {
-                // 시작 버튼은 <b>대기방의 게임 설정 단말에만</b> 둔다. 두 곳에 두면
-                // 대기방에 들어서기도 전에 시작해버릴 수 있고, 방장이 어느 쪽을
-                // 눌러야 하는지도 헷갈린다.
-                GUILayout.Label("대기방의 게임 설정 앞에서 F를 눌러 시작하세요.");
-            }
-            else if (nm.IsServer && isResult)
+            if (nm.IsServer && isResult)
             {
                 // 시나리오 4번 [7]: 결과 확인 후 대기방으로 돌아가 다시 시작한다.
+                // 이 "대기방"은 MainMenuScene의 로비가 아니라 GameScene 안의 걸어다니는
+                // 대기방이다 — 재시작은 씬을 넘나들지 않는다(LobbyConsole 참고).
                 if (GUILayout.Button("대기방으로 돌아가기", GUILayout.Height(40)))
                 {
                     manager.ReturnToLobby();
                 }
             }
-            else if (!nm.IsServer)
+            else if (!nm.IsServer && isResult)
             {
-                GUILayout.Label(isResult
-                    ? "방장이 대기방으로 돌아가기를 기다리는 중…"
-                    : "방장이 시작하기를 기다리는 중…");
+                GUILayout.Label("방장이 대기방으로 돌아가기를 기다리는 중…");
             }
 
             if (GUILayout.Button("접속 종료"))
