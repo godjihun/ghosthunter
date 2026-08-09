@@ -46,8 +46,25 @@ namespace GhostHunter.Exorcist
 
         public override void OnNetworkSpawn()
         {
-            HasTool.OnValueChanged += (_, _) => OnHeldToolChanged?.Invoke();
+            HasTool.OnValueChanged += OnHasToolChanged;
             HeldTool.OnValueChanged += (_, _) => OnHeldToolChanged?.Invoke();
+        }
+
+        public override void OnNetworkDespawn()
+        {
+            HasTool.OnValueChanged -= OnHasToolChanged;
+        }
+
+        private void OnHasToolChanged(bool had, bool has)
+        {
+            OnHeldToolChanged?.Invoke();
+
+            // 획득음은 <b>주운 본인에게만</b>. 남이 도구를 줍는 소리까지 들리면
+            // 그 위치가 그대로 드러난다.
+            if (IsOwner && !had && has)
+            {
+                Audio.GameAudio.PlayCollectItem();
+            }
         }
 
         // ── 입력 (소유자 클라이언트) ────────────────────────────────
@@ -197,6 +214,14 @@ namespace GhostHunter.Exorcist
                 // 강제 복귀와 위치 노출이다 (시나리오 3-4).
                 var ghost = NetworkPlayer.GetGhost();
                 ghost?.GetComponent<GhostController>()?.ServerApplyDetectionPenalty();
+
+                // 탐지음은 귀신에게도 들린다. 이미 강제 복귀 페널티로 들킨 걸 아는
+                // 상황이라 <b>새로 새는 정보가 없다</b> — 실패했을 때 보내면 그때는
+                // "누군가 도구를 썼다"가 새므로, 성공한 경우에만 보낸다.
+                if (ghost != null)
+                {
+                    GhostHeardDetectionRpc(RpcTarget.Single(ghost.OwnerClientId, RpcTargetUse.Temp));
+                }
             }
 
             // ⚠️ 성공이든 실패든 반드시 응답을 보낸다.
@@ -210,7 +235,17 @@ namespace GhostHunter.Exorcist
         [Rpc(SendTo.SpecifiedInParams)]
         private void DetectionResultRpc(bool detected, ToolType tool, RpcParams rpcParams = default)
         {
+            // 성공·실패 소리를 여기서 낸다. 이 RPC 자체가 이미 본인에게만 가므로
+            // 추가로 대상을 가릴 필요가 없다.
+            Audio.GameAudio.PlayDetection(detected);
             OnDetectionResult?.Invoke(detected, tool);
+        }
+
+        /// <summary>탐지 성공 시 귀신에게만 가는 소리.</summary>
+        [Rpc(SendTo.SpecifiedInParams)]
+        private void GhostHeardDetectionRpc(RpcParams rpcParams = default)
+        {
+            Audio.GameAudio.PlayDetection(true);
         }
 
         /// <summary>줍는 동작 재생. 모든 화면에서 같이 보여야 자연스럽다.</summary>

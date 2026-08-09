@@ -80,7 +80,7 @@ namespace GhostHunter.Core
         public int AltarCapacity = 3;
 
         [Tooltip("맵에 배치할 도구 총 개수. 종류당 균등하게 나눠 배치된다.")]
-        public int TotalToolCount = 30;
+        public int TotalToolCount = 60;
 
         [Tooltip("한 방의 최대 인원 (귀신 1 + 퇴마사 4).")]
         public int MaxPlayers = 5;

@@ -34,7 +34,9 @@ namespace GhostHunter.Environment
         {
             RefreshRegistry();
             doorBits.OnValueChanged += OnBitsChanged;
-            ApplyAll(doorBits.Value);
+
+            // 접속 시점의 문 상태를 맞추는 것뿐이라 소리를 내지 않는다.
+            ApplyAll(doorBits.Value, silent: true);
         }
 
         public override void OnNetworkDespawn()
@@ -57,9 +59,30 @@ namespace GhostHunter.Environment
             doors.AddRange(FindObjectsByType<DoorController>(FindObjectsInactive.Include));
         }
 
-        private void OnBitsChanged(ulong previous, ulong current) => ApplyAll(current);
+        /// <summary>
+        /// 한 번에 이보다 많은 문이 바뀌면 <b>누가 연 게 아니라 상태 동기화</b>로 본다.
+        /// 새 판 시작의 <see cref="ServerCloseAll"/>이 여기 걸린다 — 안 거르면
+        /// 게임이 시작되는 순간 저택 전체에서 문 닫는 소리가 한꺼번에 터진다.
+        /// </summary>
+        private const int BulkChangeThreshold = 3;
 
-        private void ApplyAll(ulong bits)
+        private void OnBitsChanged(ulong previous, ulong current)
+        {
+            ApplyAll(current, CountBits(previous ^ current) > BulkChangeThreshold);
+        }
+
+        private static int CountBits(ulong value)
+        {
+            int count = 0;
+            while (value != 0ul)
+            {
+                value &= value - 1ul;
+                count++;
+            }
+            return count;
+        }
+
+        private void ApplyAll(ulong bits, bool silent)
         {
             foreach (var door in doors)
             {
@@ -68,7 +91,7 @@ namespace GhostHunter.Environment
                     continue;
                 }
 
-                door.SetOpen((bits & (1ul << door.DoorIndex)) != 0ul);
+                door.SetOpen((bits & (1ul << door.DoorIndex)) != 0ul, silent);
             }
         }
 
