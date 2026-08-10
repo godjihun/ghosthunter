@@ -32,13 +32,6 @@ namespace GhostHunter.UI
         //
         // 상황마다 쓸 수 있는 키가 다르므로 미리 나눠 둔다. 매 프레임 문자열을
         // 조립하면 OnGUI가 프레임당 여러 번 불리는 만큼 쓰레기가 쌓인다.
-        private static readonly string[] LobbyHints =
-        {
-            "WASD 이동   Shift 달리기   Space 점프",
-            "F 게임 설정   Tab 이모트",
-            "` 또는 ESC   메뉴",
-        };
-
         private static readonly string[] ExorcistHints =
         {
             "WASD 이동   Shift 달리기   Space 점프",
@@ -248,8 +241,14 @@ namespace GhostHunter.UI
 
         private void OnGUI()
         {
-            // 기본 폰트에는 한글 글리프가 없다. 빌드에서 글자가 통째로 사라지므로
-            // 그리기 전에 스킨 폰트를 갈아둔다 (HudFont 주석 참고).
+            // ⚠️ 게이지·제단 현황·귀신 스킬바·인벤토리·탐지 결과·안내 문구·조작 안내는
+            // CommonHud/GhostHud/ExorcistHud(UGUI, GameHudController가 관리)로 옮겨갔으니
+            // 여기서 다시 그리지 않는다 — 그 Draw* 메서드들은 참고용으로 아래에 남겨뒀다.
+            //
+            // 아직 UGUI로 안 옮긴 것만 여기서 계속 그린다: 조준점, F 상호작용 프롬프트, 이모트 휠.
+            // 이 셋은 도구·문·제단·키오스크 앞에서 "F로 뭘 할 수 있는지"를 보여주는 것이라
+            // 게임 진행에 필요하다 — UGUI로 옮기기 전까지는 계속 켜둔다.
+
             HudFont.ApplyToSkin();
 
             if (!GameManager.IsFirstPersonActive)
@@ -265,52 +264,17 @@ namespace GhostHunter.UI
 
             EnsureStyles();
 
-            // 대기방에서는 조준점과 프롬프트, 이모트 휠만 있으면 된다.
-            // 게이지·인벤토리·제단은 아직 존재하지 않는 것들이라 띄우면 거짓말이 된다.
-            if (!GameManager.IsGameplayActive)
-            {
-                DrawCrosshair();
-                DrawInteractPrompt(local);
-                DrawEmoteWheel(local);
-                DrawKeyHints(LobbyHints);
-                return;
-            }
-
-            // 관전 중에는 조준점·프롬프트·인벤토리가 전부 의미가 없다.
-            // 남의 시점을 보는데 내 조작 UI가 떠 있으면 조작되는 줄 안다.
+            // 관전 중에는 조준점·프롬프트가 의미 없다 — 남의 시점을 보는데 내 조작 UI가
+            // 떠 있으면 조작되는 줄 안다.
             var spectator = local.GetComponent<PlayerSpectator>();
             if (spectator != null && spectator.IsSpectating)
             {
-                DrawMaterializeGauge();
-                DrawSpectatorPanel(spectator);
-                DrawAnnouncement();
-                DrawKeyHints(SpectatorHints);
                 return;
             }
 
             DrawCrosshair();
-
-            // 도구·문 프롬프트는 양쪽 진영 공통.
-            DrawMaterializeGauge();
             DrawInteractPrompt(local);
-            DrawAltarPanel();
-            DrawHidingNotice(local);
             DrawEmoteWheel(local);
-
-            if (local.IsGhost)
-            {
-                DrawFearSkillPrompt(local);
-                DrawSoulState(local);
-                DrawGhostSkillBar(local);
-            }
-            else
-            {
-                DrawInventorySlot(local);
-                DrawDetectionResult();
-            }
-
-            DrawAnnouncement();
-            DrawKeyHints(local.IsGhost ? GhostHints : ExorcistHints);
         }
 
         /// <summary>

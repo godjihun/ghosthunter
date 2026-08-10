@@ -1,5 +1,12 @@
 fileFormatVersion: 2
 guid: e3d6f9e10f65c1a40996633e4aea666d
+AssetOrigin:
+  serializedVersion: 1
+  productId: 328721
+  packageName: Bloodlines - Dark UI
+  packageVersion: 1.0.1
+  assetPath: Assets/Alebardium/Bloodlines UI/Textures/Progress_Bar/Rectangle/Progress_Bar_Rectangle_full_v5.png
+  uploadId: 936906
 TextureImporter:
   internalIDToNameTable:
   - first:
@@ -160,8 +167,8 @@ TextureImporter:
         width: 793
         height: 98
       alignment: 0
-      pivot: {x: 0, y: 0}
-      border: {x: 0, y: 0, z: 0, w: 0}
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 126, y: 0, z: 97, w: 0}
       customData: 
       outline: []
       physicsShape: []
@@ -177,7 +184,7 @@ TextureImporter:
     customData: 
     physicsShape: []
     bones: []
-    spriteID: 
+    spriteID: ea3f8f1574bbd1f41bdf7511735b77f4
     internalID: 0
     vertices: []
     indices: 
@@ -193,10 +200,3 @@ TextureImporter:
   userData: 
   assetBundleName: 
   assetBundleVariant: 
-AssetOrigin:
-  serializedVersion: 1
-  productId: 328721
-  packageName: Bloodlines - Dark UI
-  packageVersion: 1.0.1
-  assetPath: Assets/Alebardium/Bloodlines UI/Textures/Progress_Bar/Rectangle/Progress_Bar_Rectangle_full_v5.png
-  uploadId: 936906

@@ -1,12 +1,15 @@
 using GhostHunter.Player;
+using TMPro;
 using Unity.Netcode;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.UI;
 
 namespace GhostHunter.UI
 {
     /// <summary>
-    /// 백틱(`)으로 여는 일시정지 창. 설정과 나가기.
+    /// 백틱(`)으로 여는 일시정지 창. 메뉴(<see cref="menuPanel"/>)와 설정(<see cref="mousePanel"/>,
+    /// 마우스 감도)이 전부 UGUI다 — IMGUI는 더 남아있지 않다.
     ///
     /// <b>ESC를 쓰면 안 된다.</b> 브라우저가 ESC를 포인터 잠금 해제·전체화면 종료에
     /// 먼저 써버려서 Unity까지 오지 않는다 — 웹 빌드에서 창이 아예 안 열린다.
@@ -19,17 +22,56 @@ namespace GhostHunter.UI
     /// </summary>
     public class PauseMenuUI : MonoBehaviour
     {
-        private const float PanelWidth = 300f;
-        private const float PanelHeight = 210f;
-        private const float SettingsHeight = 250f;
+        [Header("전체 (StopHud) — 편집 중 꺼둔 채로 저장해도 된다")]
+        [Tooltip("이 패널의 부모. 시작할 때 한 번 강제로 켜서 자식들(MenuPanel/MousePanel/DisconnectedPanel)이 초기화되게 한다.")]
+        [SerializeField] private GameObject stopHud;
+
+        [Header("메뉴 패널 (StopHud/MenuPanel)")]
+        [SerializeField] private GameObject menuPanel;
+        [SerializeField] private Button settingsButton;
+        [SerializeField] private Button leaveButton;
+        [SerializeField] private Button resumeButton;
+
+        [Header("설정 패널 (StopHud/MousePanel) — 마우스 감도")]
+        [SerializeField] private GameObject mousePanel;
+        [SerializeField] private Slider sensitivitySlider;
+        [SerializeField] private TextMeshProUGUI sensitivityValueText;
+        [SerializeField] private Button mousePanelBackButton;
+
+        private const float MinSensitivity = 0.2f;
+        private const float MaxSensitivity = 3f;
 
         private bool open;
         private bool settingsOpen;
 
-        private GUIStyle titleStyle;
-
         /// <summary>지난 프레임에 포인터가 잠겨 있었는가. 아래 Update 주석 참고.</summary>
         private bool wasLocked;
+
+        private void Awake()
+        {
+            // 편집 중 StopHud를 꺼둔 채로 저장해도 상관없게, 시작할 때 한 번 강제로 켜서
+            // 그 안의 오브젝트들이 확실히 초기화되게 한다(다른 Hud 그룹과 같은 패턴).
+            if (stopHud != null && !stopHud.activeSelf)
+            {
+                stopHud.SetActive(true);
+            }
+
+            if (settingsButton != null) settingsButton.onClick.AddListener(() => SetSettingsOpen(true));
+            if (leaveButton != null) leaveButton.onClick.AddListener(LeaveToLobby);
+            if (resumeButton != null) resumeButton.onClick.AddListener(() => SetOpen(false));
+            if (mousePanelBackButton != null) mousePanelBackButton.onClick.AddListener(() => SetSettingsOpen(false));
+
+            if (sensitivitySlider != null)
+            {
+                sensitivitySlider.minValue = MinSensitivity;
+                sensitivitySlider.maxValue = MaxSensitivity;
+                sensitivitySlider.wholeNumbers = false;
+                sensitivitySlider.onValueChanged.AddListener(OnSensitivityChanged);
+            }
+
+            if (menuPanel != null) menuPanel.SetActive(false);
+            if (mousePanel != null) mousePanel.SetActive(false);
+        }
 
         private void Update()
         {
@@ -54,7 +96,7 @@ namespace GhostHunter.UI
             // 되돌아갈 방법이 없어 답답하다.
             if (open && settingsOpen)
             {
-                settingsOpen = false;
+                SetSettingsOpen(false);
                 return;
             }
 
@@ -104,6 +146,57 @@ namespace GhostHunter.UI
             // 커서는 PlayerRoleSetup이 단독으로 관리한다. 여기서 Cursor를 직접 만지면
             // 매 프레임 서로 덮어써서 깜빡인다.
             PlayerRoleSetup.UiPanelOpen = value;
+            RefreshPanels();
+        }
+
+        private void SetSettingsOpen(bool value)
+        {
+            settingsOpen = value;
+
+            // 설정을 여는 순간 슬라이더를 현재 값으로 맞춘다. SetValueWithoutNotify를 써야
+            // OnSensitivityChanged가 다시 불려서 PlayerPrefs에 헛되이 쓰는 걸 피한다.
+            if (value && sensitivitySlider != null)
+            {
+                sensitivitySlider.SetValueWithoutNotify(PlayerLook.SensitivityScale);
+                ApplySensitivityText(PlayerLook.SensitivityScale);
+            }
+
+            RefreshPanels();
+        }
+
+        /// <summary>메뉴/설정 패널은 서로 배타적이다 — 열려 있어도 한 번에 하나만 보인다.</summary>
+        private void RefreshPanels()
+        {
+            if (menuPanel != null) menuPanel.SetActive(open && !settingsOpen);
+            if (mousePanel != null) mousePanel.SetActive(open && settingsOpen);
+        }
+
+        /// <summary>
+        /// 슬라이더 값을 감도에 반영한다. 값은 <see cref="PlayerLook.SensitivityScale"/>에 저장된다
+        /// (static, PlayerPrefs 백업 — 씬을 넘나들어도 유지된다. SettingsPanel 주석 참고).
+        ///
+        /// 아주 미세한 값까지 그대로 적용하면 매 프레임 PlayerPrefs에 쓰게 되므로 반올림한 뒤,
+        /// <b>슬라이더 핸들도 그 반올림된 값으로 다시 스냅</b>시킨다 — 안 하면 핸들 위치와
+        /// 실제 적용된 감도가 미세하게 어긋난 채로 남는다.
+        /// </summary>
+        private void OnSensitivityChanged(float value)
+        {
+            float rounded = Mathf.Round(value * 20f) / 20f;
+            PlayerLook.SensitivityScale = rounded;
+            ApplySensitivityText(rounded);
+
+            if (sensitivitySlider != null && !Mathf.Approximately(sensitivitySlider.value, rounded))
+            {
+                sensitivitySlider.SetValueWithoutNotify(rounded);
+            }
+        }
+
+        private void ApplySensitivityText(float value)
+        {
+            if (sensitivityValueText != null)
+            {
+                sensitivityValueText.text = $"{value:F2}배";
+            }
         }
 
         private void OnDisable()
@@ -115,82 +208,11 @@ namespace GhostHunter.UI
             }
         }
 
-        private void OnGUI()
-        {
-            if (!open)
-            {
-                return;
-            }
-
-            // 기본 폰트에는 한글 글리프가 없어 빌드에서 글자가 사라진다.
-            HudFont.ApplyToSkin();
-            EnsureStyles();
-
-            float h = settingsOpen ? SettingsHeight : PanelHeight;
-            var rect = new Rect(
-                (Screen.width - PanelWidth) * 0.5f,
-                (Screen.height - h) * 0.5f,
-                PanelWidth, h);
-
-            GUI.Box(rect, GUIContent.none);
-            GUILayout.BeginArea(new Rect(rect.x + 18, rect.y + 16, rect.width - 36, rect.height - 32));
-
-            if (settingsOpen)
-            {
-                DrawSettings();
-            }
-            else
-            {
-                DrawMenu();
-            }
-
-            GUILayout.EndArea();
-        }
-
-        private void DrawMenu()
-        {
-            GUILayout.Label("메뉴", titleStyle);
-            GUILayout.Space(14);
-
-            if (GUILayout.Button("설정", GUILayout.Height(36)))
-            {
-                settingsOpen = true;
-            }
-
-            GUILayout.Space(6);
-
-            if (GUILayout.Button("나가기", GUILayout.Height(36)))
-            {
-                LeaveToLobby();
-            }
-
-            GUILayout.Space(6);
-
-            if (GUILayout.Button("계속하기", GUILayout.Height(30)))
-            {
-                SetOpen(false);
-            }
-        }
-
-        private void DrawSettings()
-        {
-            // 내용은 메인 메뉴와 공유한다 (SettingsPanel 주석 참고).
-            SettingsPanel.Draw();
-
-            GUILayout.FlexibleSpace();
-
-            if (GUILayout.Button("뒤로", GUILayout.Height(32)))
-            {
-                settingsOpen = false;
-            }
-        }
-
         /// <summary>
-        /// 접속을 끊고 로비(방 만들기·코드 참가 화면)로 돌아간다.
+        /// 접속을 끊고 로비(MainMenuScene의 방 만들기·코드 참가 화면)로 돌아간다.
         ///
-        /// <b>씬은 바꾸지 않는다.</b> 로비는 이 씬의 화면이고, 접속이 끊기면
-        /// 내 캐릭터가 사라져 <see cref="Game.NetworkBootstrapUI"/>가 알아서
-        /// 로비 패널로 되돌아간다.
+        /// 여기서 직접 씬을 로드하지 않는다 — 접속이 끊기면 <see cref="Game.NetworkBootstrapUI"/>의
+        /// 연결 끊김 폴백이 알아서 MainMenuScene으로 되돌린다.
         ///
         /// <b>방장이 나가면 방이 사라진다</b> — 방장이 곧 서버이기 때문이다.
         /// 남은 사람들은 접속이 끊기고 각자 로비로 돌아간다.
@@ -204,16 +226,6 @@ namespace GhostHunter.UI
             {
                 nm.Shutdown();
             }
-        }
-
-        private void EnsureStyles()
-        {
-            titleStyle ??= new GUIStyle(GUI.skin.label)
-            {
-                fontSize = 18,
-                fontStyle = FontStyle.Bold,
-                alignment = TextAnchor.MiddleCenter,
-            };
         }
     }
 }

@@ -1,5 +1,12 @@
 fileFormatVersion: 2
 guid: 86991b9a2f48b4a4196cb56e183aee85
+AssetOrigin:
+  serializedVersion: 1
+  productId: 328721
+  packageName: Bloodlines - Dark UI
+  packageVersion: 1.0.1
+  assetPath: Assets/Alebardium/Bloodlines UI/Textures/Input Field/Cross.png
+  uploadId: 936906
 TextureImporter:
   internalIDToNameTable:
   - first:
@@ -193,10 +200,3 @@ TextureImporter:
   userData: 
   assetBundleName: 
   assetBundleVariant: 
-AssetOrigin:
-  serializedVersion: 1
-  productId: 328721
-  packageName: Bloodlines - Dark UI
-  packageVersion: 1.0.1
-  assetPath: Assets/Alebardium/Bloodlines UI/Textures/Input Field/Cross.png
-  uploadId: 936906

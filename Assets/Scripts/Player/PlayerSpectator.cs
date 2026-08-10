@@ -31,6 +31,20 @@ namespace GhostHunter.Player
         /// <summary>관전 중인 대상. 없으면 null.</summary>
         public NetworkPlayer Target { get; private set; }
 
+        /// <summary>지금 갈아탈 수 있는 대상 수. UI가 좌우 버튼을 흐리게 할지 판단하는 데 쓴다.</summary>
+        public int CandidateCount => Candidates().Count;
+
+        /// <summary>
+        /// 귀신의 약점 3종. 관전이 시작되는 순간 서버가 <b>이 클라이언트에만</b> 보내준다.
+        ///
+        /// <see cref="NetworkPlayer.Weakness"/>는 ReadPermission.Owner라 귀신 본인 말고는
+        /// 아무도(관전자 포함) 원래 못 읽는다 — 그래서 정식 동기화 대신 별도 RPC로 스냅샷 하나만
+        /// 건네준다. <b>죽은 사람에게만 가고, 살아있는 퇴마사에게는 안 간다</b> — 이 게임엔 사망자
+        /// 전용 채팅도 아직 없어서(진행 중) 죽은 사람이 이 정보를 팀에 전할 방법이 없으므로
+        /// 안전하다고 판단했다. 다시 살아있는 사람에게 정보가 새는 경로가 생기면 이 판단을 재검토할 것.
+        /// </summary>
+        public WeaknessSet RevealedWeakness { get; private set; }
+
         private NetworkPlayer player;
 
         /// <summary>마지막으로 적용한 액션맵 전환 상태.</summary>
@@ -84,10 +98,12 @@ namespace GhostHunter.Player
                 if (want)
                 {
                     PickFirstTarget();
+                    RequestWeaknessRevealRpc();
                 }
                 else
                 {
                     Target = null;
+                    RevealedWeakness = default;
                     RestoreCamera();
                 }
                 ApplyActionMap(want);
@@ -144,6 +160,33 @@ namespace GhostHunter.Player
             mapSwitched = spectating;
             playerInput.SwitchCurrentActionMap(
                 spectating ? "Spectator" : (player != null && player.IsGhost ? "Ghost" : "Exorcist"));
+        }
+
+        // ── 약점 공개 (관전자 전용) ──────────────────────────────────
+
+        [Rpc(SendTo.Server)]
+        private void RequestWeaknessRevealRpc(RpcParams rpcParams = default)
+        {
+            // 클라이언트 말을 믿지 않는다 — 죽은 사람만 받을 수 있다.
+            if (player == null || player.IsAlive.Value)
+            {
+                return;
+            }
+
+            var ghost = NetworkPlayer.GetGhost();
+            if (ghost == null)
+            {
+                return;
+            }
+
+            RevealWeaknessRpc(ghost.Weakness.Value,
+                RpcTarget.Single(rpcParams.Receive.SenderClientId, RpcTargetUse.Temp));
+        }
+
+        [Rpc(SendTo.SpecifiedInParams)]
+        private void RevealWeaknessRpc(WeaknessSet weakness, RpcParams rpcParams = default)
+        {
+            RevealedWeakness = weakness;
         }
 
         // ── 입력 (Send Messages) ───────────────────────────────────

@@ -31,11 +31,23 @@ namespace GhostHunter.UI
         [Tooltip("패널 전환 시 재생할 페이드 효과. 비워두면 즉시 전환한다.")]
         [SerializeField] private FadeTransition transition;
 
+        [Tooltip("'게임 설명' 버튼(원래 설정 버튼)이 열 설명 패널.")]
+        [SerializeField] private ExplainPanelUI explainPanel;
+
         /// <summary>설정 창이 떠 있는가. 대기방 메뉴와 같은 내용을 그린다.</summary>
         private bool settingsOpen;
 
         private void Awake()
         {
+            // 편집 중 LobbyPanel/ExplainPanel/Cover를 꺼둔 채로 저장해도 상관없게,
+            // 시작할 때 한 번 강제로 켜서 그 안의 스크립트들(Awake)이 확실히 초기화되게 한다.
+            // ExplainPanel·Cover(전환 효과)는 알파로만 여닫으므로 계속 켜둔 채로 둔다 —
+            // LobbyPanel만 초기 상태(꺼짐)로 되돌린다.
+            ForceActivateOnce(lobbyPanel);
+            ForceActivateOnce(explainPanel != null ? explainPanel.gameObject : null);
+            ForceActivateOnce(transition != null ? transition.gameObject : null);
+            if (lobbyPanel != null) lobbyPanel.SetActive(false);
+
             // <b>리스너는 코드에서 붙인다.</b> 인스펙터의 OnClick 목록에 넣으면
             // 어떤 함수가 걸려 있는지 코드만 봐서는 알 수 없고, 스크립트 이름이
             // 바뀌면 조용히 끊어진 채로 남는다.
@@ -44,9 +56,12 @@ namespace GhostHunter.UI
                 startButton.onClick.AddListener(StartGame);
             }
 
+            // 원래 "설정" 버튼을 "게임 설명"으로 바꿔 쓰는 중이다 — 마우스 감도 설정(SettingsPanel)은
+            // 아직 코드에 남아있지만 이 버튼에서는 더 이상 열리지 않는다. 나중에 감도 설정을 다시
+            // 넣고 싶으면 별도 버튼을 만들어 SetSettingsOpen(true)에 연결하면 된다.
             if (settingsButton != null)
             {
-                settingsButton.onClick.AddListener(() => SetSettingsOpen(true));
+                settingsButton.onClick.AddListener(() => explainPanel?.Open());
             }
 
             if (quitButton != null)
@@ -63,6 +78,14 @@ namespace GhostHunter.UI
             if (backToMainButton != null)
             {
                 backToMainButton.onClick.AddListener(BackToMainMenu);
+            }
+        }
+
+        private static void ForceActivateOnce(GameObject go)
+        {
+            if (go != null && !go.activeSelf)
+            {
+                go.SetActive(true);
             }
         }
 

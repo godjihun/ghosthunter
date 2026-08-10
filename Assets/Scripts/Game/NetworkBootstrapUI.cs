@@ -1,8 +1,10 @@
 using GhostHunter.Core;
 using GhostHunter.Player;
+using TMPro;
 using Unity.Netcode;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using UnityEngine.UI;
 
 namespace GhostHunter.Game
 {
@@ -14,9 +16,17 @@ namespace GhostHunter.Game
     /// 넘어간다(<see cref="PreGameLobby.ServerStartGame"/>) — GameScene은 이제 <b>항상
     /// 접속 후에만</b> 로드된다. 이 클래스는 게임 중 좌측 상단 상태 표시와,
     /// 결과 화면(승패·"대기방으로 돌아가기")만 그린다.
+    ///
+    /// <b>연결 끊김 화면만 UGUI다</b>(<see cref="disconnectedPanel"/>, StopHud/DisconnectedPanel).
+    /// 나머지(대기방·결과 요약)는 아직 이 클래스의 IMGUI가 그린다.
     /// </summary>
     public class NetworkBootstrapUI : MonoBehaviour
     {
+        [Header("연결 끊김 UGUI (StopHud/DisconnectedPanel)")]
+        [SerializeField] private GameObject disconnectedPanel;
+        [SerializeField] private TextMeshProUGUI disconnectedMessageText;
+        [SerializeField] private Button mainMenuButton;
+
         private const float PanelWidth = 320f;
         private const float PanelHeight = 260f;
 
@@ -28,6 +38,16 @@ namespace GhostHunter.Game
         /// <summary>다음 프레임에 Shutdown을 실행해야 하는가. 아래 RequestShutdown 주석 참고.</summary>
         private bool shutdownRequested;
         private string pendingMessage;
+
+        private void Awake()
+        {
+            if (mainMenuButton != null)
+            {
+                mainMenuButton.onClick.AddListener(() => SceneManager.LoadScene("MainMenuScene"));
+            }
+
+            if (disconnectedPanel != null) disconnectedPanel.SetActive(false);
+        }
 
         /// <summary>
         /// 접속이 끊기는 것을 <b>직접 감시한다.</b>
@@ -52,6 +72,25 @@ namespace GhostHunter.Game
             }
 
             TickShutdown(nm);
+            ApplyDisconnectedPanel(nm);
+        }
+
+        /// <summary>미접속 상태(호스트 종료 등으로 끊긴 경우 포함)면 UGUI 연결 끊김 화면을 켠다.</summary>
+        private void ApplyDisconnectedPanel(NetworkManager nm)
+        {
+            bool connected = nm.IsServer || nm.IsConnectedClient;
+
+            if (disconnectedPanel != null)
+            {
+                disconnectedPanel.SetActive(!connected);
+            }
+
+            if (!connected && disconnectedMessageText != null)
+            {
+                disconnectedMessageText.text = string.IsNullOrEmpty(statusMessage)
+                    ? "연결이 끊겼습니다"
+                    : statusMessage;
+            }
         }
 
         private void OnDestroy()
@@ -151,19 +190,25 @@ namespace GhostHunter.Game
             bool hasBody = Player.NetworkPlayer.GetLocal() != null;
             bool isResult = GameManager.CurrentPhase == GamePhase.Result;
 
-            if (hasBody && !isResult)
-            {
-                DrawInGameHud();
-            }
-            else
+            // 게임 중(hasBody && !isResult) 표시는 이제 CommonHud/GhostHud/ExorcistHud
+            // (UGUI, GameHudController가 관리)가 대체했으므로 여기서는 아무것도 안 그린다.
+            // DrawInGameHud()의 내용은 참고용으로 아래에 남겨뒀다.
+            if (!hasBody || isResult)
             {
                 DrawCenterPanel(nm);
             }
         }
 
-        /// <summary>접속 끊김 안내 또는 결과 화면. 마우스 커서가 살아 있는 상태다.</summary>
+        /// <summary>대기방·결과 요약 화면. 마우스 커서가 살아 있는 상태다.</summary>
         private void DrawCenterPanel(NetworkManager nm)
         {
+            bool connected = nm.IsServer || nm.IsConnectedClient;
+            if (!connected)
+            {
+                // 연결 끊김 화면은 이제 UGUI(ApplyDisconnectedPanel)가 그린다.
+                return;
+            }
+
             var rect = new Rect(
                 (Screen.width - PanelWidth) * 0.5f,
                 (Screen.height - PanelHeight) * 0.5f,
@@ -171,30 +216,6 @@ namespace GhostHunter.Game
 
             GUI.Box(rect, GUIContent.none);
             GUILayout.BeginArea(new Rect(rect.x + 16, rect.y + 16, rect.width - 32, rect.height - 32));
-
-            bool connected = nm.IsServer || nm.IsConnectedClient;
-
-            if (!connected)
-            {
-                // GameScene은 로비를 거쳐야만 들어오므로, 여기 도달했는데 미접속이면
-                // 도중에 끊긴 것이다 — 돌아갈 곳이 없으면 화면이 막힌 채로 남는다.
-                GUILayout.Label("연결이 끊겼습니다", titleStyle);
-                GUILayout.Space(10);
-
-                if (!string.IsNullOrEmpty(statusMessage))
-                {
-                    GUILayout.Label(statusMessage);
-                    GUILayout.Space(10);
-                }
-
-                if (GUILayout.Button("메인 메뉴로", GUILayout.Height(36)))
-                {
-                    SceneManager.LoadScene("MainMenuScene");
-                }
-
-                GUILayout.EndArea();
-                return;
-            }
 
             var manager = GameManager.Instance;
             bool isResult = manager != null && manager.Phase.Value == GamePhase.Result;
@@ -259,30 +280,6 @@ namespace GhostHunter.Game
         /// <b>참가 코드가 여기 있어야 한다.</b> 방장은 대기방을 돌아다니면서 코드를
         /// 남에게 알려줘야 하는데, 큰 패널이 접힌 뒤라 볼 방법이 이것뿐이다.
         /// </summary>
-        private void DrawLobbyHud()
-        {
-            GUILayout.BeginArea(new Rect(10, 10, 300, 160));
-
-            GUILayout.Label("대기방");
-
-            if (!string.IsNullOrEmpty(RelayConnection.JoinCode))
-            {
-                GUILayout.Label($"참가 코드: {RelayConnection.JoinCode}");
-            }
-
-            GUILayout.Label($"접속 인원: {NetworkPlayer.All.Count}명");
-
-            var nm = NetworkManager.Singleton;
-            GUILayout.Label(nm != null && nm.IsServer
-                ? "게임 설정(F)에서 설정과 시작을 조작합니다."
-                : "방장이 시작하기를 기다리는 중…");
-
-            // 백틱은 눈에 띄는 키가 아니다. 안내가 없으면 메뉴가 있는 줄도 모른다.
-            GUILayout.Label("` 키: 메뉴 (설정 / 나가기)");
-
-            GUILayout.EndArea();
-        }
-
         /// <summary>게임 중 좌측 상단 상태 표시. 1인칭 화면을 가리지 않게 최소한만.</summary>
         private void DrawInGameHud()
         {
@@ -292,9 +289,9 @@ namespace GhostHunter.Game
                 return;
             }
 
+            // 대기방 정보는 이제 UI.WaitingRoomHudUI(UGUI)가 그린다 — 여기서는 아무것도 안 그린다.
             if (manager.Phase.Value == GamePhase.Lobby)
             {
-                DrawLobbyHud();
                 return;
             }
 

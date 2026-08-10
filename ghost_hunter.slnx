@@ -1,5 +1,5 @@
 ﻿<Solution>
-  <Project Path="Alebardium.BloodlinesUI.csproj" />
   <Project Path="Assembly-CSharp.csproj" />
+  <Project Path="Alebardium.BloodlinesUI.csproj" />
   <Project Path="Assembly-CSharp-Editor.csproj" />
 </Solution>
