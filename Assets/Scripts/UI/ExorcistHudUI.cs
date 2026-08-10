@@ -21,6 +21,11 @@ namespace GhostHunter.UI
             public Image background;
             [Tooltip("도구 아이콘. 빈 칸이면 꺼진다.")]
             public Image icon;
+
+            [Tooltip("쿨타임 오버레이. icon과 겹쳐서 그 위에 놓고, Image Type=Filled / " +
+                "Fill Method=Vertical / Fill Origin=Top으로 설정할 것 — 쓴 직후엔 아이콘 전체를 덮고, " +
+                "쿨타임이 돌수록 위에서부터 걷혀 아래에서 위로 차오르는 것처럼 보인다.")]
+            public Image cooldownOverlay;
         }
 
         [Header("공용 아이콘")]
@@ -131,6 +136,8 @@ namespace GhostHunter.UI
                     }
                 }
 
+                ApplyCooldownOverlay(slot.cooldownOverlay, filled ? inventory.CooldownAt(i) : 0f);
+
                 if (slot.background != null)
                 {
                     bool isSelected = i == selected;
@@ -141,6 +148,25 @@ namespace GhostHunter.UI
                     }
                 }
             }
+        }
+
+        /// <summary>
+        /// 오버레이는 Fill Origin=Top이라 fillAmount가 "위에서부터 덮은 비율"이다.
+        /// 남은 쿨타임 비율을 그대로 넣으면 쓴 직후(비율 1)엔 아이콘 전체를 덮고,
+        /// 다 돌수록(비율 0) 위에서부터 걷혀 아래에서 위로 차오르는 것처럼 보인다.
+        /// </summary>
+        private void ApplyCooldownOverlay(Image overlay, float remaining)
+        {
+            if (overlay == null)
+            {
+                return;
+            }
+
+            float total = GameManager.Config != null ? GameManager.Config.ToolCooldown : 20f;
+            float fraction = total > 0f ? Mathf.Clamp01(remaining / total) : 0f;
+
+            overlay.enabled = fraction > 0f;
+            overlay.fillAmount = fraction;
         }
     }
 }

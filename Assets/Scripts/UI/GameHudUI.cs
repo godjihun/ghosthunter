@@ -54,31 +54,7 @@ namespace GhostHunter.UI
             "` 또는 ESC   메뉴",
         };
 
-        // ── 단계 전환 안내 ──
-        //
-        // 조사·사냥에 들어가는 순간 화면 중상단에 잠깐 띄운다. 단계는 좌상단에도
-        // 표시되지만 작아서 눈에 안 들어온다 — 판의 성격이 바뀌는 순간만큼은
-        // 화면 가운데서 알려줘야 한다.
-        private const float AnnounceDuration = 10f;
-        private const float AnnounceFade = 1.2f;
-
-        private GUIStyle announceStyle;
-        private string announceText;
-        private float announceTimer;
-
-        /// <summary>마지막으로 본 약점 발견 개수. 늘어난 순간에만 공지한다.</summary>
-        private int lastFoundCount;
-
-        /// <summary>마지막으로 본 단계. 바뀌는 순간을 잡기 위한 것.</summary>
-        private GamePhase lastPhase;
-
-        /// <summary>
-        /// 첫 프레임에는 안내를 띄우지 않는다.
-        ///
-        /// 판이 도는 중에 들어온 사람에게 "조사 시간입니다"가 뜨면 방금 시작한 줄 안다.
-        /// 처음 본 단계는 기록만 하고 넘어간다.
-        /// </summary>
-        private bool phaseKnown;
+        // 단계 전환·약점 발견 안내는 AnnouncementUI(UGUI)로 옮겼다 — 여기서는 더 이상 다루지 않는다.
 
         // ── 탐지 결과 표시 ──
         private ExorcistInventory subscribed;
@@ -115,100 +91,6 @@ namespace GhostHunter.UI
             if (detectionTimer > 0f)
             {
                 detectionTimer -= Time.deltaTime;
-            }
-
-            TickAnnouncement();
-
-            // 단계 안내보다 <b>뒤에</b> 부른다. 탐지 성공은 곧 은신 전환을 부르는데,
-            // 같은 프레임에 둘 다 뜨면 "어떤 도구로 찾았는가"가 묻힌다.
-            TickWeaknessAnnouncement();
-        }
-
-        /// <summary>
-        /// 약점이 밝혀지는 순간을 잡아 <b>전원에게</b> 공지한다.
-        ///
-        /// RPC를 따로 파지 않는다 — 목록이 이미 동기화되므로 각자 자기 쪽 증가를 보고
-        /// 띄우면 그것으로 전원이 본다. 도중에 접속한 사람에게 옛 공지가 뜨지도 않는다.
-        /// </summary>
-        private void TickWeaknessAnnouncement()
-        {
-            var manager = GameManager.Instance;
-            if (manager == null)
-            {
-                return;
-            }
-
-            int count = manager.FoundWeaknesses.Count;
-
-            // 판이 바뀌면 목록이 비워진다. 그때는 새 공지가 아니라 초기화다.
-            if (count == lastFoundCount)
-            {
-                return;
-            }
-
-            int previous = lastFoundCount;
-            lastFoundCount = count;
-
-            if (count <= previous || count == 0)
-            {
-                return;
-            }
-
-            var tool = (Core.ToolType)manager.FoundWeaknesses[count - 1];
-            int total = GameManager.Config != null ? GameManager.Config.WeaknessCount : 3;
-
-            announceText = count >= total
-                ? $"{tool.ToKorean()}! 약점을 모두 밝혀냈습니다."
-                : $"{tool.ToKorean()}(으)로 귀신을 찾아냈습니다!\n약점 {count}/{total} — 귀신이 자리를 옮깁니다.";
-            announceTimer = AnnounceDuration;
-        }
-
-        /// <summary>단계가 바뀌는 순간을 잡아 안내를 띄우고, 시간을 깎는다.</summary>
-        private void TickAnnouncement()
-        {
-            var phase = GameManager.CurrentPhase;
-
-            if (!phaseKnown)
-            {
-                phaseKnown = true;
-                lastPhase = phase;
-            }
-            else if (phase != lastPhase)
-            {
-                lastPhase = phase;
-
-                // 진영마다 해야 할 일이 반대다. 퇴마사용 문구를 귀신에게 그대로 띄우면
-                // "귀신을 퇴마하세요"를 귀신이 읽게 된다.
-                bool isGhost = NetworkPlayer.GetLocal()?.IsGhost ?? false;
-
-                // 은신은 <b>판이 시작될 때만이 아니라</b> 탐지에 성공할 때마다 돌아온다.
-                // 그래서 첫 은신인지 재은신인지에 따라 문구가 달라야 한다.
-                bool rehiding = (GameManager.Instance?.FoundWeaknesses.Count ?? 0) > 0;
-
-                string text = phase switch
-                {
-                    GamePhase.Hiding => isGhost
-                        ? (rehiding ? "들켰습니다…\n다른 곳으로 자리를 옮기세요." : "몸을 숨기세요…")
-                        : (rehiding ? "귀신이 자리를 옮기고 있습니다…" : "귀신이 숨고 있습니다…"),
-                    GamePhase.Investigation => isGhost
-                        ? "조사 시간입니다…\n공포스킬로 퇴마를 저지하세요."
-                        : "조사 시간입니다…\n도구로 귀신을 찾아내거나, 약점 3종을 제단에 바치세요.",
-                    GamePhase.Hunt => isGhost
-                        ? "사냥의 시간입니다…\n모든 퇴마사를 처치하세요."
-                        : "이제 사냥이 시작됩니다…\n귀신으로부터 살아남으세요.",
-                    _ => null,
-                };
-
-                if (text != null)
-                {
-                    announceText = text;
-                    announceTimer = AnnounceDuration;
-                }
-            }
-
-            if (announceTimer > 0f)
-            {
-                announceTimer -= Time.deltaTime;
             }
         }
 
@@ -454,39 +336,6 @@ namespace GhostHunter.UI
         }
 
         /// <summary>
-        /// 단계 전환 안내. 화면 중상단에 스르륵 떴다가 스르륵 사라진다.
-        ///
-        /// 페이드는 <b>알파로만</b> 준다 — IMGUI에는 애니메이션이 없으므로
-        /// 남은 시간에서 알파를 계산해 <c>GUI.color</c>에 싣는다.
-        /// 들어올 때와 나갈 때 중 더 작은 값을 쓰면 양쪽이 자동으로 이어진다.
-        ///
-        /// <b>GUI.color는 반드시 되돌린다.</b> 그대로 두면 이후에 그리는
-        /// 모든 UI가 같이 흐려진다.
-        /// </summary>
-        private void DrawAnnouncement()
-        {
-            if (announceTimer <= 0f || string.IsNullOrEmpty(announceText))
-            {
-                return;
-            }
-
-            float elapsed = AnnounceDuration - announceTimer;
-            float alpha = Mathf.Clamp01(Mathf.Min(elapsed / AnnounceFade, announceTimer / AnnounceFade));
-
-            var rect = new Rect(Screen.width * 0.5f - 340f, Screen.height * 0.14f, 680f, 88f);
-
-            var previous = GUI.color;
-
-            GUI.color = new Color(1f, 1f, 1f, alpha * 0.55f);
-            GUI.DrawTexture(rect, barBack);
-
-            GUI.color = new Color(1f, 1f, 1f, alpha);
-            GUI.Label(rect, announceText, announceStyle);
-
-            GUI.color = previous;
-        }
-
-        /// <summary>
         /// 우측 하단 조작 안내.
         ///
         /// <b>우측 하단인 이유</b>: 좌하단은 귀신 스킬바, 하단 중앙은 인벤토리 칸,
@@ -542,15 +391,6 @@ namespace GhostHunter.UI
             {
                 fontSize = 13,
                 alignment = TextAnchor.MiddleLeft,
-                normal = { textColor = Color.white },
-            };
-
-            // 단계 전환 안내는 두 줄이 들어가므로 줄바꿈을 켠다.
-            announceStyle ??= new GUIStyle(GUI.skin.label)
-            {
-                fontSize = 17,
-                alignment = TextAnchor.MiddleCenter,
-                wordWrap = true,
                 normal = { textColor = Color.white },
             };
 
